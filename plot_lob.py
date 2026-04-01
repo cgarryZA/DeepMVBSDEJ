@@ -199,16 +199,13 @@ def plot_spread_heatmap(config, bsde, model, out_dir):
     t_vals = np.array([bsde.t_grid[idx] for idx in t_indices])
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    # Use tight vmin/vmax centered on equilibrium to show actual variation
-    equilibrium = 2.0 / bsde.alpha
+    # Auto-scale colorbar to exact data range so variation is always visible
     spread_min = np.min(spread_grid)
     spread_max = np.max(spread_grid)
-    # Symmetric deviation from equilibrium for colorbar
-    dev = max(abs(spread_max - equilibrium), abs(spread_min - equilibrium), 0.01)
     im = ax.imshow(
         spread_grid.T, aspect="auto", origin="lower",
         extent=[t_vals[0], t_vals[-1], q_range[0], q_range[-1]],
-        cmap="RdYlBu_r", vmin=equilibrium - dev, vmax=equilibrium + dev,
+        cmap="RdYlBu_r", vmin=spread_min, vmax=spread_max,
     )
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Bid-ask spread")
