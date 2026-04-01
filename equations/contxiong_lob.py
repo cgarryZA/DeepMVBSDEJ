@@ -113,20 +113,40 @@ class ContXiongLOB(Equation):
         delta_clamped = torch.clamp(delta, -5.0 / self.alpha, 10.0 / self.alpha)
         return torch.exp(-self.alpha * delta_clamped) * competitive_factor
 
-    def _optimal_quotes_np(self, z_q):
-        """Avellaneda-Stoikov optimal quotes from Z^q (inventory gradient).
-        delta_a = 1/alpha + z_q,  delta_b = 1/alpha - z_q
+    def _sigma_q_equilibrium(self):
+        """Inventory diffusion coefficient at equilibrium (q=0, optimal quotes).
+        sigma_q = sqrt(lambda_a * f(1/alpha) + lambda_b * f(1/alpha))
+                = sqrt(2 * lambda * exp(-1))
         """
+        return np.sqrt(
+            self.lambda_a * np.exp(-1.0) + self.lambda_b * np.exp(-1.0)
+        )
+
+    def _optimal_quotes_np(self, z_q):
+        """Optimal quotes from BSDE Z^q, corrected for diffusion scaling.
+
+        The BSDE gives Z^q = sigma_q * partial_q V (Feynman-Kac).
+        The HJB FOC gives delta_a* = 1/alpha + partial_q V.
+        So we need p = Z^q / sigma_q, then delta_a = 1/alpha + p.
+
+        We use sigma_q at equilibrium as a first-order approximation
+        to avoid the circular dependency (sigma_q depends on quotes
+        which depend on p which depends on sigma_q).
+        """
+        sigma_q = self._sigma_q_equilibrium()
+        p = z_q / sigma_q  # approximate partial_q V
         base_spread = 1.0 / self.alpha
-        delta_a = base_spread + z_q
-        delta_b = base_spread - z_q
+        delta_a = base_spread + p
+        delta_b = base_spread - p
         return delta_a, delta_b
 
     def _optimal_quotes_tf(self, z_q):
         """PyTorch version."""
+        sigma_q = self._sigma_q_equilibrium()
+        p = z_q / sigma_q
         base_spread = 1.0 / self.alpha
-        delta_a = base_spread + z_q
-        delta_b = base_spread - z_q
+        delta_a = base_spread + p
+        delta_b = base_spread - p
         return delta_a, delta_b
 
     # ------------------------------------------------------------------
