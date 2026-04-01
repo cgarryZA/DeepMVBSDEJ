@@ -64,9 +64,9 @@ No published work applies the Deep BSDE framework to limit order book market-mak
 
 \paragraph{Contribution.} This is a computational study, not a claim of a fully validated method. We:
 \begin{enumerate}
-  \item Formulate a \textbf{deep jump-BSDE solver} for the Cont--Xiong market-making model, preserving discrete Poisson inventory dynamics (\Cref{sec:jump}). The neural network outputs $(Z_t, U_t^+, U_t^-)$ and optimal quotes are extracted from the value increments.
+  \item Formulate a \textbf{deep jump-BSDE solver} for the Cont--Xiong market-making model, preserving the discrete Poisson inventory jump structure (\Cref{sec:jump}). The neural network outputs $(Z_t, U_t^+, U_t^-)$ and optimal quotes are extracted from the value increments.
   \item Validate against a \textbf{matched finite-horizon finite-difference baseline} (\Cref{sec:fd}), achieving $<0.1\%$ value error for the surrogate and demonstrating that forward policy simulation captures $99.3\%$ of FD-optimal P\&L.
-  \item Compare against a \textbf{diffusion surrogate baseline} and show it distorts the optimal control: the spread is $1.333$ vs ground-truth $1.432$ (\Cref{sec:surrogate}).
+  \item Compare against a \textbf{diffusion surrogate baseline} and show it produces structurally constant spread ($1.333$) vs the matched finite-horizon FD spread ($1.370$), a $2.7\%$ distortion (\Cref{sec:surrogate}).
   \item Conduct preliminary \textbf{stress tests} under non-linear inventory penalties (\Cref{sec:stress}).
 \end{enumerate}
 
@@ -136,7 +136,17 @@ where $\phi(t, q)$ solves a one-dimensional HJB in $(t, q)$ only. The optimal qu
 \end{proposition}
 
 \begin{proof}
-Cash $X_t$ enters the objective and dynamics linearly, so $V$ is affine in $x$: $V = x + v(t, s, q)$. Since $S_t$ is a martingale and $q$ evolves independently of $W^S$ (execution rates are $S$-independent), we have $\E[q_T S_T \mid S_t = s, q_t = q] = s \cdot \E[q_T \mid q_t = q]$ by independence. Therefore $v(t, s, q) = qs + \phi(t, q)$ where $\phi$ captures expected future trading profits minus penalties. Since neither the execution rates nor $\phi$ depend on $S$, the optimal quotes are $S$-independent.
+Since $X_t$ enters the objective linearly and its dynamics are $\dd X_t = (\text{execution cashflows}) + q_t \, \dd S_t$, the value function is affine in $x$: $V(t, x, s, q) = x + v(t, s, q)$, where $v$ is the expected future value starting from zero cash.
+
+For any admissible control $(\delta^a, \delta^b)$, the mark-to-market wealth at time $T$ is
+\[
+  X_T + q_T S_T = X_t + q_t S_t + \int_t^T \bigl(\delta_u^a \Delta \, \dd N_u^a + \delta_u^b \Delta \, \dd N_u^b\bigr) + \int_t^T S_u \, \dd q_u + \int_t^T q_u \, \dd S_u + [q, S]_T,
+\]
+where the integration-by-parts $q_T S_T = q_t S_t + \int S \, \dd q + \int q \, \dd S$ is used (and $[q, S] = 0$ since $q$ jumps at Poisson times independent of the continuous $W^S$). The execution cash and inventory-change terms depend on $(q, \delta)$ only, not on $S$. The stochastic integral $\int_t^T q_u \, \dd S_u$ is a martingale (since $S$ is a martingale and $q$ is adapted with bounded paths), so it has zero expectation. Therefore, taking expectations conditional on $(X_t, S_t, q_t) = (x, s, q)$:
+\[
+  \E[X_T + q_T S_T - \psi(q_T)] = x + qs + \E\biggl[\int_t^T (\text{execution profits}) \, \dd u - \psi(q_T) \biggm| q_t = q\biggr],
+\]
+which depends on $s$ only through the trivial $qs$ term. The supremum over controls preserves this structure, giving $V = x + qs + \phi(t, q)$ where $\phi$ solves a 1D HJB. Since neither execution rates nor $\phi$ depend on $S$, optimal quotes are $S$-independent.
 \end{proof}
 
 \begin{remark}
@@ -153,7 +163,7 @@ We preserve the exact Poisson dynamics~\eqref{eq:inventory_discrete} and solve a
 \end{equation}
 Inventory jumps by $\pm\Delta$ at Poisson times with rates $\nu_t^a = \lambda^a f(\delta_t^a, \mup)$ and $\nu_t^b = \lambda^b f(\delta_t^b, \mup)$.
 
-\paragraph{BSDE with jumps.} By applying It\^o's formula for c\`adl\`ag semimartingales to $Y_t = V(t, S_t, q_t)$, the continuous part gives the Brownian term $Z_t \, \dd W_t^S$ and the jumps contribute:
+\paragraph{BSDE with jumps.} We derive the backward equation by applying It\^o's formula for c\`adl\`ag semimartingales to $Y_t = \phi(t, q_t)$ (using the 1D reduction from \Cref{prop:1d}, which shows $V = x + qs + \phi(t, q)$). Between jumps, $\phi$ evolves by its time derivative only: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, the inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
 \begin{align}
   &\text{At buy execution (}q \to q + \Delta\text{):} \quad \Delta Y = V(S, q + \Delta) - V(S, q) \eqqcolon U_t^+, \label{eq:jump_up} \\
   &\text{At sell execution (}q \to q - \Delta\text{):} \quad \Delta Y = V(S, q - \Delta) - V(S, q) \eqqcolon U_t^-. \label{eq:jump_down}
@@ -162,7 +172,11 @@ Decomposing into compensated Poisson processes $\dd\tilde{N}_t^m = \dd N_t^m - \
 \begin{equation}\label{eq:fbsdej}
   \dd Y_t = -g(t, X_t, Y_t, Z_t, U_t^+, U_t^-) \, \dd t + Z_t \, \dd W_t^S + U_t^+ \, \dd\tilde{N}_t^b + U_t^- \, \dd\tilde{N}_t^a,
 \end{equation}
-where the generator absorbs the compensator drift:
+To derive the generator, apply It\^o's formula for jump processes to $Y_t = \phi(t, q_t)$ (using the 1D reduction). Between jumps, $\dd Y = \partial_t\phi \, \dd t$. At jump times, $Y$ changes by $U^\pm$. Writing $\dd N^m = \dd\tilde{N}^m + \nu^m \, \dd t$:
+\[
+  \dd Y_t = \bigl(\partial_t\phi + \nu^b U^+ + \nu^a U^-\bigr) \dd t + Z_t \, \dd W_t^S + U^+ \dd\tilde{N}^b + U^- \dd\tilde{N}^a.
+\]
+The HJB for $\phi$ at an interior point requires $\partial_t\phi = r\phi + \psi - \nu^a(\delta^{a*}\Delta + U^-) - \nu^b(\delta^{b*}\Delta + U^+)$. Substituting and identifying $\dd Y = -g \, \dd t + (\text{martingale terms})$ with $Y = \phi$:
 \begin{equation}\label{eq:generator_jump}
   g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+).
 \end{equation}
@@ -176,7 +190,7 @@ since $U^- = V(q-\Delta) - V(q)$ and $U^+ = V(q+\Delta) - V(q)$ are the exact di
 The total spread is $\delta^a + \delta^b = 2/\alpha - (U^- + U^+)/\Delta$. Unlike the diffusion surrogate, this is \emph{not} constant --- it depends on the curvature of $V$ through the jump values $U^\pm$. At $q = 0$ with quadratic $V$, the second-order correction is small and the spread is approximately $2/\alpha$.
 \end{remark}
 
-\paragraph{Terminal condition.} We truncate to $[0, T]$ with $g(X_T) = -\psi(q_T)$. Discounting suggests the omitted tail contribution should decay on an $e^{-rT}$ scale under bounded-reward assumptions, but we do not prove a truncation bound for this controlled problem. For $r = 0.1$, $T = 1$, this is a heavily truncated horizon.
+\paragraph{Terminal condition.} We truncate to $[0, T]$ with $Y_T = -\psi(q_T)$. Discounting suggests the omitted tail contribution should decay on an $e^{-rT}$ scale under bounded-reward assumptions, but we do not prove a truncation bound for this controlled problem. For $r = 0.1$, $T = 1$, this is a heavily truncated horizon.
 
 % ============================================================
 \section{Diffusion Surrogate Baseline}
@@ -238,7 +252,7 @@ where $\Delta\tilde{N}_n^m = N_n^m - \nu_n^m \Delta t$ and $N_n^m \sim \mathrm{P
 
 For the surrogate~\eqref{eq:bsde_surrogate}, subnets output $Z_n \in \R^2$ and no jump terms appear.
 
-$Y_0$ is a trainable scalar. The loss is $\mathcal{L}(\theta) = \E[\ell(Y_{N_T} - g(X_T))]$ with clipped Huber threshold $C = 50$.
+$Y_0$ is a trainable scalar. The terminal target is $\xi \coloneqq -\psi(q_T)$ and the loss is $\mathcal{L}(\theta) = \E[\ell(Y_{N_T} - \xi)]$ with clipped Huber threshold $C = 50$.
 
 \paragraph{Architecture.} Two hidden layers (32 neurons), batch normalisation (momentum $0.01$, following the undocumented trick in~\cite{han2018solving}), ReLU activations. One independent subnet per time step. Adam optimiser with piecewise LR: $10^{-2}$ (steps $0$--$2000$), $10^{-3}$ ($2000$--$4000$), $10^{-4}$ thereafter.
 
@@ -300,7 +314,7 @@ Deep BSDE jump (5000 iter) & 0.444 & $8.6 \times 10^{-4}$ & discrete & $2.8\%$ \
 \end{tabular}
 \end{table}
 
-\noindent The finite-horizon FD solves the \emph{same} problem: same $T = 1$, same $g(X_T) = -\psi(q_T)$, same parameters. This is an apples-to-apples comparison, unlike the earlier heuristic rescaling of the stationary solution.
+\noindent The finite-horizon FD solves the \emph{same} problem: same $T = 1$, same terminal condition $Y_T = -\psi(q_T)$, same parameters. This is an apples-to-apples comparison, unlike the earlier heuristic rescaling of the stationary solution.
 
 \paragraph{Key observations.}
 \begin{enumerate}
