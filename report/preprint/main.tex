@@ -47,7 +47,7 @@
 
 % ============================================================
 \begin{abstract}
-We develop a deep learning solver for optimal market-making in limit order books, preserving the discrete Poisson inventory jump structure of the Cont--Xiong (2024) dealer market model. The solver extends the Deep BSDE framework (Han, Jentzen, E, 2018) to forward-backward SDEs with Poisson jumps (FBSDEJ), where the neural network outputs both the Brownian gradient $Z_t$ and jump value controls $U_t^\pm$ at each time step. Optimal bid-ask quotes are recovered from the discrete value increments via the HJB first-order conditions. We validate against a matched finite-horizon finite-difference baseline solving the same discrete-inventory HJB with the same terminal condition. The diffusion surrogate achieves $<0.1\%$ value error and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. The surrogate's structurally constant spread ($2/\alpha$) differs from the FD spread ($1.370$) by $2.7\%$, quantifying the cost of replacing discrete value increments with local derivatives. We conduct preliminary stress tests under non-linear inventory penalties and discuss the limitations of both formulations.
+We propose and empirically evaluate a deep BSDE-inspired solver for optimal market-making in limit order books, preserving the discrete Poisson inventory jump structure of the Cont--Xiong (2024) dealer market model. The solver extends the Deep BSDE framework (Han, Jentzen, E, 2018) to forward-backward SDEs with Poisson jumps (FBSDEJ), where the neural network outputs both the Brownian gradient $Z_t$ and jump value controls $U_t^\pm$ at each time step. Optimal bid-ask quotes are recovered from the discrete value increments via the HJB first-order conditions. We validate against a matched finite-horizon finite-difference baseline solving the same discrete-inventory HJB with the same terminal condition. The diffusion surrogate achieves $<0.1\%$ value error and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. The surrogate's structurally constant spread ($2/\alpha$) differs from the FD spread ($1.370$) by $2.7\%$, quantifying the cost of replacing discrete value increments with local derivatives. We conduct preliminary stress tests under non-linear inventory penalties and discuss the limitations of both formulations.
 \end{abstract}
 
 \noindent\textbf{Keywords:} backward stochastic differential equations, deep learning, mean-field games, limit order books, market-making, jump-diffusion
@@ -163,7 +163,16 @@ We preserve the exact Poisson dynamics~\eqref{eq:inventory_discrete} and solve a
 \end{equation}
 Inventory jumps by $\pm\Delta$ at Poisson times with rates $\nu_t^a = \lambda^a f(\delta_t^a, \mup)$ and $\nu_t^b = \lambda^b f(\delta_t^b, \mup)$.
 
-\paragraph{BSDE with jumps (formal computational representation).} We motivate the backward equation by formally applying It\^o's formula for c\`adl\`ag semimartingales to $Y_t = \phi(t, q_t)$ (using the 1D reduction from \Cref{prop:1d}). This derivation is \emph{not} a rigorous probabilistic representation theorem for the controlled jump problem; it is a formal identification of the BSDE structure consistent with the discrete HJB~\eqref{eq:hjb}, which we use as the computational target.
+\paragraph{Finite-horizon HJB.} By \Cref{prop:1d}, the value function reduces to $\phi(t, q)$. The finite-horizon HJB for $\phi$ on $[0, T]$ with terminal condition $\phi(T, q) = -\psi(q)$ is:
+\begin{equation}\label{eq:hjb_finite}
+  \partial_t \phi + \sup_{\delta^a, \delta^b} \Bigl[
+    \nu^a\bigl(\delta^a\Delta + \phi(t, q-\Delta) - \phi(t,q)\bigr)
+    + \nu^b\bigl(\delta^b\Delta + \phi(t, q+\Delta) - \phi(t,q)\bigr)
+  \Bigr] - r\phi - \psi(q) = 0,
+\end{equation}
+where $\nu^m = \lambda^m e^{-\alpha\delta^m} h(\mup)$. This is the \emph{exact} problem solved by the finite-difference baseline (\Cref{sec:fd}) and the \emph{computational target} for the deep solver. The stationary HJB~\eqref{eq:hjb} is recovered as $T \to \infty$ with $\partial_t\phi = 0$.
+
+\paragraph{BSDE with jumps (formal computational representation).} We motivate the backward equation by formally applying It\^o's formula to $Y_t = \phi(t, q_t)$. This is a formal identification of the BSDE structure consistent with~\eqref{eq:hjb_finite}, not a rigorous probabilistic representation theorem; we use it as the computational recipe.
 
 Between jumps, $\phi$ evolves by its time derivative: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
 \begin{align}
@@ -261,6 +270,8 @@ For the surrogate~\eqref{eq:bsde_surrogate}, subnets output $Z_n \in \R^2$ and n
 $Y_0$ is a trainable scalar. The terminal target is $\xi \coloneqq -\psi(q_T)$ and the loss is $\mathcal{L}(\theta) = \E[\ell(Y_{N_T} - \xi)]$ with clipped Huber threshold $C = 50$.
 
 \paragraph{Architecture.} Two hidden layers (32 neurons), batch normalisation (momentum $0.01$, following the undocumented trick in~\cite{han2018solving}), ReLU activations. One independent subnet per time step. Adam optimiser with piecewise LR: $10^{-2}$ (steps $0$--$2000$), $10^{-3}$ ($2000$--$4000$), $10^{-4}$ thereafter.
+
+\paragraph{Control loop.} At each Euler step $n$, the subnet $\phi_n$ evaluates on $X_{n+1}$ (the post-step state) and outputs $(Z_n, U_n^+, U_n^-)$. Quotes are computed from $U^\pm$ via~\eqref{eq:optimal_quotes_jump} and clipped to $[0.001, \, 10/\alpha]$. Execution rates $\nu_n^{a,b}$ are then evaluated explicitly at the clipped quotes. No fixed-point iteration or implicit solve is performed: the control map from network output to quotes to intensities to generator is fully explicit and feedforward.
 
 \subsection{Mean-Field Coupling}
 
