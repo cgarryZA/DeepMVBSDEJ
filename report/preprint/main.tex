@@ -31,7 +31,7 @@
 \newcommand{\dd}{\mathrm{d}}
 \newcommand{\mup}{\mu_t}
 
-\title{A Deep Jump-BSDE Solver for Mean-Field Market-Making\\in Limit Order Books}
+\title{A Deep Jump-BSDE Solver for Optimal Market-Making\\in Limit Order Books}
 
 \author{
   Christian Garry \\
@@ -47,7 +47,7 @@
 
 % ============================================================
 \begin{abstract}
-We develop a deep learning solver for optimal market-making in limit order books, preserving the discrete microstructure dynamics of the Cont--Xiong (2024) dealer market model. The solver extends the Deep BSDE framework (Han, Jentzen, E, 2018) to forward-backward SDEs with Poisson jumps (FBSDEJ), where the neural network outputs both the Brownian gradient $Z_t$ and jump value controls $U_t^\pm$ at each time step. Optimal bid-ask quotes are recovered from the discrete value increments via the HJB first-order conditions. We validate against a matched finite-horizon finite-difference baseline solving the same discrete-inventory HJB with the same terminal condition. The diffusion surrogate achieves $<0.1\%$ value error and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. The surrogate's structurally constant spread ($2/\alpha$) differs from the FD spread ($1.370$) by $2.7\%$, quantifying the cost of replacing discrete value increments with local derivatives. We conduct preliminary stress tests under non-linear inventory penalties and discuss the limitations of both formulations.
+We develop a deep learning solver for optimal market-making in limit order books, preserving the discrete Poisson inventory jump structure of the Cont--Xiong (2024) dealer market model. The solver extends the Deep BSDE framework (Han, Jentzen, E, 2018) to forward-backward SDEs with Poisson jumps (FBSDEJ), where the neural network outputs both the Brownian gradient $Z_t$ and jump value controls $U_t^\pm$ at each time step. Optimal bid-ask quotes are recovered from the discrete value increments via the HJB first-order conditions. We validate against a matched finite-horizon finite-difference baseline solving the same discrete-inventory HJB with the same terminal condition. The diffusion surrogate achieves $<0.1\%$ value error and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. The surrogate's structurally constant spread ($2/\alpha$) differs from the FD spread ($1.370$) by $2.7\%$, quantifying the cost of replacing discrete value increments with local derivatives. We conduct preliminary stress tests under non-linear inventory penalties and discuss the limitations of both formulations.
 \end{abstract}
 
 \noindent\textbf{Keywords:} backward stochastic differential equations, deep learning, mean-field games, limit order books, market-making, jump-diffusion
@@ -142,7 +142,7 @@ For any admissible control $(\delta^a, \delta^b)$, the mark-to-market wealth at 
 \[
   X_T + q_T S_T = X_t + q_t S_t + \int_t^T \bigl(\delta_u^a \Delta \, \dd N_u^a + \delta_u^b \Delta \, \dd N_u^b\bigr) + \int_t^T S_u \, \dd q_u + \int_t^T q_u \, \dd S_u + [q, S]_T,
 \]
-where the integration-by-parts $q_T S_T = q_t S_t + \int S \, \dd q + \int q \, \dd S$ is used (and $[q, S] = 0$ since $q$ jumps at Poisson times independent of the continuous $W^S$). The execution cash and inventory-change terms depend on $(q, \delta)$ only, not on $S$. The stochastic integral $\int_t^T q_u \, \dd S_u$ is a martingale (since $S$ is a martingale and $q$ is adapted with bounded paths), so it has zero expectation. Therefore, taking expectations conditional on $(X_t, S_t, q_t) = (x, s, q)$:
+where the integration-by-parts $q_T S_T = q_t S_t + \int S \, \dd q + \int q \, \dd S$ is used (and $[q, S] = 0$ since $q$ jumps at Poisson times independent of the continuous $W^S$). The execution cash and inventory-change terms depend on $(q, \delta)$ only, not on $S$. Under the model's inventory constraint $|q_t| \le H$ (imposed via the finite grid $\mathcal{Q}_i = \{-H, \ldots, H\}$ in~\cite{cont2024dynamics}), the process $q$ is bounded. Therefore $\int_t^T q_u \, \dd S_u$ is a martingale (bounded integrand, continuous square-integrable martingale integrator) with zero expectation. Therefore, taking expectations conditional on $(X_t, S_t, q_t) = (x, s, q)$:
 \[
   \E[X_T + q_T S_T - \psi(q_T)] = x + qs + \E\biggl[\int_t^T (\text{execution profits}) \, \dd u - \psi(q_T) \biggm| q_t = q\biggr],
 \]
@@ -163,7 +163,9 @@ We preserve the exact Poisson dynamics~\eqref{eq:inventory_discrete} and solve a
 \end{equation}
 Inventory jumps by $\pm\Delta$ at Poisson times with rates $\nu_t^a = \lambda^a f(\delta_t^a, \mup)$ and $\nu_t^b = \lambda^b f(\delta_t^b, \mup)$.
 
-\paragraph{BSDE with jumps.} We derive the backward equation by applying It\^o's formula for c\`adl\`ag semimartingales to $Y_t = \phi(t, q_t)$ (using the 1D reduction from \Cref{prop:1d}, which shows $V = x + qs + \phi(t, q)$). Between jumps, $\phi$ evolves by its time derivative only: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, the inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
+\paragraph{BSDE with jumps (formal computational representation).} We motivate the backward equation by formally applying It\^o's formula for c\`adl\`ag semimartingales to $Y_t = \phi(t, q_t)$ (using the 1D reduction from \Cref{prop:1d}). This derivation is \emph{not} a rigorous probabilistic representation theorem for the controlled jump problem; it is a formal identification of the BSDE structure consistent with the discrete HJB~\eqref{eq:hjb}, which we use as the computational target.
+
+Between jumps, $\phi$ evolves by its time derivative: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
 \begin{align}
   &\text{At buy execution (}q \to q + \Delta\text{):} \quad \Delta Y = V(S, q + \Delta) - V(S, q) \eqqcolon U_t^+, \label{eq:jump_up} \\
   &\text{At sell execution (}q \to q - \Delta\text{):} \quad \Delta Y = V(S, q - \Delta) - V(S, q) \eqqcolon U_t^-. \label{eq:jump_down}
@@ -185,6 +187,10 @@ The optimal quotes~\eqref{eq:foc_ask}--\eqref{eq:foc_bid} become:
   \boxed{\delta_t^{a*} = \frac{1}{\alpha} - \frac{U_t^-}{\Delta}, \qquad \delta_t^{b*} = \frac{1}{\alpha} - \frac{U_t^+}{\Delta},}
 \end{equation}
 since $U^- = V(q-\Delta) - V(q)$ and $U^+ = V(q+\Delta) - V(q)$ are the exact discrete value increments from~\eqref{eq:jump_up}--\eqref{eq:jump_down}.
+
+\begin{remark}[Quote admissibility]
+The FOC formulas~\eqref{eq:optimal_quotes_jump} can produce negative or very small quotes if $|U^\pm|$ is large relative to $\Delta/\alpha$. In the implementation, quotes are clipped to $[\epsilon, 10/\alpha]$ with $\epsilon = 0.001$. This is a computational safeguard; the model does not formally constrain quotes to be positive. Under our default parameters ($\phi = 0.01$, $\alpha = 1.5$), the value increments are small and clipping rarely activates.
+\end{remark}
 
 \begin{remark}
 The total spread is $\delta^a + \delta^b = 2/\alpha - (U^- + U^+)/\Delta$. Unlike the diffusion surrogate, this is \emph{not} constant --- it depends on the curvature of $V$ through the jump values $U^\pm$. At $q = 0$ with quadratic $V$, the second-order correction is small and the spread is approximately $2/\alpha$.
@@ -318,7 +324,7 @@ Deep BSDE jump (5000 iter) & 0.444 & $8.6 \times 10^{-4}$ & discrete & $2.8\%$ \
 
 \paragraph{Key observations.}
 \begin{enumerate}
-  \item Against the \textbf{matched finite-horizon baseline}, the diffusion surrogate achieves $<0.1\%$ value error at $q = 0$. This is much stronger than the previously reported $5.5\%$, which was an artefact of comparing against a heuristically rescaled stationary solution.
+  \item Against the \textbf{matched finite-horizon baseline}, the diffusion surrogate achieves $<0.1\%$ value error at $q = 0$. Over the full inventory grid $q \in \{-10, \ldots, 10\}$, the mean absolute value error is $0.076$ and the maximum is $0.45$ (at extreme inventories where $V \approx 0$). The near-perfect $q = 0$ match is much stronger than the previously reported $5.5\%$, which was an artefact of comparing against a heuristically rescaled stationary solution.
   \item The \textbf{surrogate spread} ($1.333$) differs from the FD spread ($1.370$) by $2.7\%$, quantifying the cost of replacing discrete value increments with local derivatives.
   \item The \textbf{jump model} ($Y_0 = 0.444$, $2.8\%$ error) is less accurate in value than the surrogate. This is likely due to the higher variance of compensated Poisson increments requiring more training iterations.
   \item \textbf{Forward policy simulation} (\Cref{sec:simulation}) shows the surrogate policy achieves P\&L within $0.7\%$ of the FD-optimal policy (Sharpe $0.82$ vs $0.81$), confirming the learned policy is economically functional.
@@ -420,7 +426,7 @@ Exponential ($\gamma = 1$) & 0.448 & $1.4 \times 10^{-4}$ & 0.129 \\
 
 \begin{table}[ht]
 \centering
-\caption{FD ground truth across penalty types ($T = \infty$, policy iteration).}
+\caption{FD stationary reference across penalty types ($T = \infty$, policy iteration). These are \emph{qualitative} reference values, not matched finite-horizon benchmarks for the deep solver.}
 \label{tab:fd_penalties}
 \begin{tabular}{@{}llll@{}}
 \toprule
