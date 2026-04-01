@@ -291,9 +291,14 @@ class ContXiongLOB(Equation):
         # Optimal quotes from Z^q
         delta_a, delta_b = self._optimal_quotes_tf(z_q)
 
-        # Execution probabilities (no competitive factor in generator — it's in the sample)
-        f_a = self._exec_prob_tf(delta_a) * self.lambda_a
-        f_b = self._exec_prob_tf(delta_b) * self.lambda_b
+        # Competitive factor from mean-field (must match forward SDE)
+        t_val = t.item() if isinstance(t, torch.Tensor) else float(t)
+        t_idx = min(int(round(t_val / self.delta_t)), self.num_time_interval)
+        h_factor = self._drift_predict_mc(t_idx)
+
+        # Execution probabilities with mean-field coupling
+        f_a = self._exec_prob_tf(delta_a, h_factor) * self.lambda_a
+        f_b = self._exec_prob_tf(delta_b, h_factor) * self.lambda_b
 
         # Running cost: inventory penalty (configurable type)
         psi = self._penalty_tf(q)
@@ -302,9 +307,10 @@ class ContXiongLOB(Equation):
         profit_a = f_a * delta_a
         profit_b = f_b * delta_b
 
-        # Generator: f = -r*y + psi - profits
-        # Note: in BSDE, dY = -f dt + Z dW, so positive f means Y decreases
-        return -self.discount_rate * y + psi - profit_a - profit_b
+        # Generator: f = -r*y - psi + profits
+        # Derivation: HJB is rV + psi = profits, so PDE f = -rV + profits - psi
+        # BSDE: dY = -f dt + Z dW, loss matches Y_T to g(X_T)
+        return -self.discount_rate * y - psi + profit_a + profit_b
 
     def _penalty_tf(self, q):
         """Inventory penalty psi(q). Configurable via penalty_type.

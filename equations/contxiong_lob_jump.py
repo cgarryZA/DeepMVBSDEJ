@@ -183,7 +183,9 @@ class ContXiongLOBJump(Equation):
         comp_a = rate_a * (delta_a * self.delta + u_minus)
         comp_b = rate_b * (delta_b * self.delta + u_plus)
 
-        return -self.discount_rate * y + psi - comp_a - comp_b
+        # Generator: f = -rY - psi + compensator profits
+        # Derivation: HJB rV + psi = comp_terms, so f = -rV - psi + comp
+        return -self.discount_rate * y - psi + comp_a + comp_b
 
     def g_tf(self, t, x):
         """Terminal condition: -phi * q_T^2"""
