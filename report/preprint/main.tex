@@ -224,13 +224,57 @@ The finite-horizon theoretical value at $q = 0$ is
 $$V_T(0) = \frac{2 \lambda e^{-1} / \alpha}{r} \bigl(1 - e^{-rT}\bigr) = 0.467,$$
 confirming that the learned $Y_0 = 0.456$ is within 2.4\% of the analytical benchmark.
 
-% Placeholder for figure
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.8\textwidth]{../../plots/final/convergence.png}
-%   \caption{Training convergence: loss (left) and $Y_0$ (right) over 5000 iterations.}
-%   \label{fig:convergence}
-% \end{figure}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/convergence.png}
+  \caption{Training convergence over 5000 iterations. Left: terminal mismatch loss (log scale). Right: learned initial value $Y_0$, stabilising at $0.456$ (within 2.4\% of the finite-horizon analytical benchmark $V_T(0) = 0.467$).}
+  \label{fig:convergence}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/quoting_strategy.png}
+  \caption{Optimal quoting strategy at $t \approx 0$. Left: total bid-ask spread is constant at $2/\alpha = 1.333$ (the Avellaneda--Stoikov result). Right: individual ask and bid half-spreads vary with inventory --- the market maker widens the ask when long and tightens it when short, reflecting inventory risk management.}
+  \label{fig:quoting}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/spread_heatmap.png}
+  \caption{Quote asymmetry over (time, inventory). Left: ask half-spread $\delta^a(t, q)$. Right: quote skew $\delta^a - \delta^b = 2Z_t^q$, showing how the neural network learns to tilt quotes based on inventory position. Positive skew (red) at positive inventory widens the ask to reduce long exposure.}
+  \label{fig:heatmap}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/value_function.png}
+  \caption{Value function cross-section at $t = 0$. The HJB curve $V_T(q) = (\text{profits}(q) - \psi(q))(1 - e^{-rT})/r$ (blue) peaks at $q = 0$ and decays quadratically due to inventory penalty. The learned $Y_0 = 0.456$ (red) closely matches the analytical $V_T(0) = 0.467$ (green).}
+  \label{fig:value}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/z_gradient_surface_3d.png}
+  \caption{Learned gradient surface $Z_t^q(t, q)$: the inventory gradient of the value function that directly determines optimal quotes via $\delta^{a*} = 1/\alpha + Z_t^q$.}
+  \label{fig:z_surface}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/sample_paths.png}
+    \caption{Price (left) and inventory (right) sample paths.}
+    \label{fig:paths}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/inventory_distribution.png}
+    \caption{Terminal inventory distribution, centred near $q = 0$.}
+    \label{fig:dist}
+  \end{subfigure}
+  \caption{Forward SDE diagnostics: sample trajectories and terminal inventory distribution under the continuous relaxation with $\phi = 0.01$.}
+  \label{fig:forward}
+\end{figure}
 
 \subsection{Stress Testing Under Non-Linear Penalties}
 

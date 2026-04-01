@@ -172,11 +172,11 @@ def plot_inventory_distribution(bsde, out_dir, num_sample=2000):
 
 
 def plot_spread_heatmap(config, bsde, model, out_dir):
-    """Heatmap: optimal spread as function of (time, inventory).
+    """Heatmap: quote asymmetry and ask quote as function of (time, inventory).
 
-    Uses trained subnets at each time step to evaluate Z^q(t, S, q),
-    then derives spread = 2/alpha + 2*Z^q (approximately, for small Z^q).
-    Requires trained model weights.
+    The total spread delta_a + delta_b = 2/alpha is ALWAYS constant (Z^q cancels).
+    The interesting object is the SKEW: delta_a - delta_b = 2*Z^q, which shows
+    how the market maker tilts quotes based on inventory position.
     """
     model.eval()
     n_t = min(bsde.num_time_interval - 1, len(model.subnet))
@@ -184,7 +184,8 @@ def plot_spread_heatmap(config, bsde, model, out_dir):
     t_indices = np.linspace(0, n_t - 1, min(n_t, 40), dtype=int)
     q_range = np.linspace(-4, 4, n_q)
 
-    spread_grid = np.zeros((len(t_indices), n_q))
+    ask_grid = np.zeros((len(t_indices), n_q))
+    skew_grid = np.zeros((len(t_indices), n_q))
 
     for i, t_idx in enumerate(t_indices):
         for j, q in enumerate(q_range):
@@ -192,29 +193,39 @@ def plot_spread_heatmap(config, bsde, model, out_dir):
             with torch.no_grad():
                 z = model.subnet[t_idx](x) / bsde.dim
             z_q = z[0, 1].item()
-            delta_a = 1.0 / bsde.alpha + z_q
-            delta_b = 1.0 / bsde.alpha - z_q
-            spread_grid[i, j] = delta_a + delta_b
+            ask_grid[i, j] = 1.0 / bsde.alpha + z_q
+            skew_grid[i, j] = 2 * z_q  # delta_a - delta_b
 
     t_vals = np.array([bsde.t_grid[idx] for idx in t_indices])
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    # Auto-scale colorbar to exact data range so variation is always visible
-    spread_min = np.min(spread_grid)
-    spread_max = np.max(spread_grid)
-    im = ax.imshow(
-        spread_grid.T, aspect="auto", origin="lower",
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Ask half-spread
+    im0 = axes[0].imshow(
+        ask_grid.T, aspect="auto", origin="lower",
         extent=[t_vals[0], t_vals[-1], q_range[0], q_range[-1]],
-        cmap="RdYlBu_r", vmin=spread_min, vmax=spread_max,
+        cmap="RdYlBu_r", vmin=np.min(ask_grid), vmax=np.max(ask_grid),
     )
-    cbar = plt.colorbar(im, ax=ax)
-    cbar.set_label("Bid-ask spread")
-    ax.axhline(y=0, color="white", linestyle="--", alpha=0.5)
-    ax.set_xlabel("Time $t$")
-    ax.set_ylabel("Inventory $q$")
-    ax.set_title("Optimal Spread Surface (trained model)")
-    equilibrium = 2.0 / bsde.alpha
-    ax.set_title(f"Optimal Spread Surface (equilibrium = {equilibrium:.3f})")
+    cbar0 = plt.colorbar(im0, ax=axes[0])
+    cbar0.set_label("$\\delta^a$ (ask half-spread)")
+    axes[0].axhline(y=0, color="white", linestyle="--", alpha=0.5)
+    axes[0].set_xlabel("Time $t$")
+    axes[0].set_ylabel("Inventory $q$")
+    axes[0].set_title("Ask Quote $\\delta^a(t, q)$")
+
+    # Quote skew (delta_a - delta_b = 2*Z^q) — divergent colormap centred on 0
+    skew_abs = max(abs(np.min(skew_grid)), abs(np.max(skew_grid)), 1e-8)
+    im1 = axes[1].imshow(
+        skew_grid.T, aspect="auto", origin="lower",
+        extent=[t_vals[0], t_vals[-1], q_range[0], q_range[-1]],
+        cmap="RdBu_r", vmin=-skew_abs, vmax=skew_abs,
+    )
+    cbar1 = plt.colorbar(im1, ax=axes[1])
+    cbar1.set_label("$\\delta^a - \\delta^b = 2Z_t^q$")
+    axes[1].axhline(y=0, color="black", linestyle="--", alpha=0.5)
+    axes[1].set_xlabel("Time $t$")
+    axes[1].set_ylabel("Inventory $q$")
+    axes[1].set_title("Quote Skew $2Z_t^q(t, q)$")
 
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, "spread_heatmap.png"), dpi=150)

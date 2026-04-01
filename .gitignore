@@ -2,4 +2,8 @@
 /plots
 __pycache__/
 *.pyc
-configs/generated/
+configs/generated/report/preprint/figures/
+report/preprint/*.aux
+report/preprint/*.log
+report/preprint/*.out
+report/preprint/*.pdf
