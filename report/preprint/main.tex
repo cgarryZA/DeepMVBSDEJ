@@ -342,45 +342,41 @@ Deep BSDE jump (5000 iter) & 0.444 & $8.6 \times 10^{-4}$ & discrete & $2.8\%$ \
   \item \textbf{Finite differences are trivially superior} at $d = 2$. The deep method's value is potential scalability.
 \end{enumerate}
 
-\subsection{Convergence and Quoting Strategy}
+\subsection{Convergence, Quoting, and Value Function}
 
-\Cref{fig:convergence} shows training convergence. \Cref{fig:quoting} shows the learned quoting strategy from the diffusion surrogate: the total spread is identically $2/\alpha$ (structural, not learned), while individual quotes vary with inventory.
+\Cref{fig:convergence} shows training convergence. \Cref{fig:quoting} shows the quoting strategy: total spread is structural ($2/\alpha$), individual quotes vary with inventory. \Cref{fig:value} compares the learned $Y_0$ against the finite-horizon benchmark. \Cref{fig:z_surface} shows $Z_t^q(t, q)$, the BSDE control from which quotes are derived, and \Cref{fig:heatmap} shows the quote skew $\delta^a - \delta^b$ over (time, inventory).
 
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/convergence.png}
+  \includegraphics[width=0.82\textwidth]{figures/convergence.png}
   \caption{Training convergence (diffusion surrogate, 5000 iterations).}
   \label{fig:convergence}
 \end{figure}
 
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/quoting_strategy.png}
+  \includegraphics[width=0.82\textwidth]{figures/quoting_strategy.png}
   \caption{Quoting strategy (surrogate). Total spread is structural ($2/\alpha$); individual quotes vary with inventory.}
   \label{fig:quoting}
 \end{figure}
 
-\subsection{Gradient Surface and Value Function}
-
-\Cref{fig:z_surface} shows $Z_t^q(t, q)$, the BSDE control from which quotes are derived. \Cref{fig:value} compares the learned $Y_0$ against the finite-horizon benchmark. \Cref{fig:heatmap} shows the quote skew $\delta^a - \delta^b$.
-
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.7\textwidth]{figures/z_gradient_surface_3d.png}
-  \caption{Learned gradient surface $Z_t^q(t, q)$ (surrogate). Approximately planar, consistent with quadratic penalty.}
-  \label{fig:z_surface}
-\end{figure}
-
-\begin{figure}[ht]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/value_function.png}
+  \includegraphics[width=0.82\textwidth]{figures/value_function.png}
   \caption{Value function comparison at $t = 0$.}
   \label{fig:value}
 \end{figure}
 
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/spread_heatmap.png}
+  \includegraphics[width=0.65\textwidth]{figures/z_gradient_surface_3d.png}
+  \caption{Learned gradient surface $Z_t^q(t, q)$ (surrogate). Approximately planar, consistent with quadratic penalty.}
+  \label{fig:z_surface}
+\end{figure}
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/spread_heatmap.png}
   \caption{Ask quote (left) and quote skew $\delta^a - \delta^b$ (right) over (time, inventory).}
   \label{fig:heatmap}
 \end{figure}
@@ -420,53 +416,38 @@ The cubic penalty has $\psi' \in C^1$ and $\psi'' = 2\phi + 2\phi|q|$, which is 
 
 \Cref{tab:stress} reports multi-seed results (2 seeds, 500 iterations). \Cref{tab:fd_penalties} provides stationary FD reference.
 
-\begin{table}[ht]
+\begin{table}[!htb]
 \centering
-\caption{Deep BSDE surrogate: stress test (2 seeds, 500 iterations, $\phi = 0.01$).}
+\caption{Stress test: Deep BSDE surrogate (2 seeds, 500 iter, $\phi = 0.01$) and FD stationary reference ($T = \infty$, \emph{qualitative} values only).}
 \label{tab:stress}
-\begin{tabular}{@{}lllll@{}}
+\begin{tabular}{@{}lllllll@{}}
 \toprule
-Penalty & $Y_0$ (mean $\pm$ std) & $\max |Z_t|$ (mean $\pm$ std) \\
+Penalty & \multicolumn{2}{c}{Deep BSDE (mean $\pm$ std)} & \multicolumn{2}{c}{FD stationary ref.} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+ & $Y_0$ & $\max|Z_t|$ & $V(0)$ & Spread \\
 \midrule
-Quadratic & $0.457 \pm 0.000$ & $0.127 \pm 0.006$ \\
-Cubic & $0.452 \pm 0.001$ & $0.220 \pm 0.011$ \\
-Exponential ($\gamma = 1$) & $0.448 \pm 0.001$ & $0.200 \pm 0.046$ \\
+Quadratic & $0.457 \pm 0.000$ & $0.127 \pm 0.006$ & 4.555 & 1.432 \\
+Cubic & $0.452 \pm 0.001$ & $0.220 \pm 0.011$ & 4.410 & 1.475 \\
+Exponential & $0.448 \pm 0.001$ & $0.200 \pm 0.046$ & 4.384 & 1.483 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[ht]
-\centering
-\caption{FD stationary reference across penalty types ($T = \infty$, policy iteration). These are \emph{qualitative} reference values, not matched finite-horizon benchmarks for the deep solver.}
-\label{tab:fd_penalties}
-\begin{tabular}{@{}llll@{}}
-\toprule
-Penalty & $V(0)$ & Spread at $q = 0$ \\
-\midrule
-Quadratic & 4.555 & 1.432 \\
-Cubic & 4.410 & 1.475 \\
-Exponential ($\gamma = 1$) & 4.384 & 1.483 \\
-\bottomrule
-\end{tabular}
-\end{table}
+At $\phi = 0.01$, all penalties converge stably with tight error bars. The $Y_0$ ordering matches FD ground truth. Non-linear penalties widen the stationary FD spread ($1.432 \to 1.483$). \Cref{fig:fd_baseline,fig:fd_quotes} show the FD value functions and optimal quotes.
 
-\Cref{fig:fd_baseline} shows the FD ground truth value functions and optimal quotes across all three penalty types.
-
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/fd_value_functions.png}
-  \caption{FD ground truth: value functions $V(q)$ for quadratic, cubic, and exponential penalties. All peak at $q = 0$ and decay with increasing $|q|$.}
+  \includegraphics[width=0.82\textwidth]{figures/fd_value_functions.png}
+  \caption{FD ground truth: value functions $V(q)$ for quadratic, cubic, and exponential penalties.}
   \label{fig:fd_baseline}
 \end{figure}
 
-\begin{figure}[ht]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/fd_optimal_quotes.png}
-  \caption{FD ground truth: optimal quotes across inventory. Non-linear penalties produce wider spreads ($1.43 \to 1.48$) and more asymmetric ask/bid skew at large $|q|$.}
+  \includegraphics[width=0.82\textwidth]{figures/fd_optimal_quotes.png}
+  \caption{FD ground truth: optimal quotes across inventory. Non-linear penalties produce wider spreads ($1.43 \to 1.48$).}
   \label{fig:fd_quotes}
 \end{figure}
-
-At $\phi = 0.01$, all penalties converge stably with tight error bars. The $Y_0$ ordering matches FD ground truth.
 
 To identify the actual failure threshold, we sweep $\gamma$ (exponential penalty) and $\phi$ (quadratic penalty) independently (\Cref{tab:breaking}).
 
@@ -499,7 +480,9 @@ Non-linear penalties also widen the stationary FD optimal spread ($1.432 \to 1.4
 
 \subsection{Forward Process Diagnostics}
 
-\begin{figure}[ht]
+\Cref{fig:forward} shows sample trajectories and terminal inventory distribution, confirming the forward SDE produces well-behaved paths with inventory centred near zero.
+
+\begin{figure}[!htb]
   \centering
   \begin{subfigure}[b]{0.48\textwidth}
     \includegraphics[width=\textwidth]{figures/sample_paths.png}
@@ -514,18 +497,12 @@ Non-linear penalties also widen the stationary FD optimal spread ($1.432 \to 1.4
   \label{fig:forward}
 \end{figure}
 
-% ============================================================
-\section{Conclusion}
-\label{sec:conclusion}
-
-We have implemented two deep BSDE solvers for optimal market-making in the Cont--Xiong dealer market model: a jump-aware formulation (FBSDEJ) preserving discrete Poisson dynamics, and a diffusion surrogate for comparison. Against a matched finite-horizon finite-difference baseline, the surrogate achieves $<0.1\%$ value error at $q = 0$ and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. However, the surrogate's structurally constant spread ($2/\alpha = 1.333$) differs from the FD spread ($1.370$) by $2.7\%$, demonstrating that \emph{accurate value approximation does not guarantee accurate control recovery} --- the diffusion surrogate solves a different control problem from the original discrete game. The jump model ($2.8\%$ value error) is numerically less accurate due to higher-variance training dynamics induced by compensated Poisson increments --- as evidenced by consistently larger gradient magnitudes across seeds --- but preserves the discrete control structure.
-
 \subsection{Horizon Sensitivity}
 \label{sec:horizon}
 
 To empirically justify the finite-horizon truncation, we compare FD and BSDE at several horizons (\Cref{tab:horizon}).
 
-\begin{table}[ht]
+\begin{table}[!htb]
 \centering
 \caption{Horizon sensitivity: matched FD vs Deep BSDE surrogate (1000 iterations).}
 \label{tab:horizon}
@@ -543,11 +520,20 @@ $T$ & FD $V(0,0)$ & BSDE $Y_0$ & FD spread & Error \\
 
 The solver is accurate ($<0.3\%$) for $T \le 2$ but fails at $T = 5$ ($37\%$ error). At $T = 5$ with $N_T = 50$, the step size $\Delta t = 0.1$ is large enough that the explicit Euler BSDE discretisation error accumulates significantly over 50 steps, and the training variance grows with the longer trajectory. The FD spread converges toward the stationary value $1.432$ as $T$ increases, confirming the finite-horizon truncation is the source of the spread difference noted in \Cref{sec:comparison}.
 
-\paragraph{Mean-field ablation.} Comparing Type~1 (no coupling) and Type~3 (moment-proxy fictitious play), the multi-seed results are $Y_0 = 0.4572 \pm 0.0002$ vs $0.4573 \pm 0.0011$. The mean-field proxy has \emph{no measurable effect} at $\phi = 0.01$, confirming that the current moment-based coupling is too coarse to influence the control in this parameter regime. Genuine distribution-dependent coupling is needed to make the mean-field interaction substantive.
+\subsection{Mean-Field Ablation}
+\label{sec:ablation}
+
+Comparing Type~1 (no coupling) and Type~3 (moment-proxy fictitious play), the multi-seed results are $Y_0 = 0.4572 \pm 0.0002$ vs $0.4573 \pm 0.0011$. The mean-field proxy has \emph{no measurable effect} at $\phi = 0.01$, confirming that the current moment-based coupling is too coarse to influence the control in this parameter regime. Genuine distribution-dependent coupling is needed to make the mean-field interaction substantive.
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have proposed and empirically evaluated two deep BSDE solvers for optimal market-making in the Cont--Xiong dealer market model: a jump-aware formulation (FBSDEJ) preserving discrete Poisson inventory dynamics, and a diffusion surrogate for comparison. Against a matched finite-horizon finite-difference baseline, the surrogate achieves $<0.1\%$ value error at $q = 0$ and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. However, the surrogate's structurally constant spread ($2/\alpha = 1.333$) differs from the FD spread ($1.370$) by $2.7\%$, demonstrating that \emph{accurate value approximation does not guarantee accurate control recovery}. The jump model ($2.8\%$ value error) is numerically less accurate due to higher-variance training dynamics induced by compensated Poisson increments --- as evidenced by consistently larger gradient magnitudes across seeds --- but preserves the discrete control structure.
 
 \paragraph{Limitations.} The experiments are at $d = 2$ (effectively $d = 1$ after the reduction in \Cref{prop:1d}) where finite differences are superior. The mean-field coupling is moment-based and, as the ablation shows, currently inactive at the tested parameters. The stress tests use 2 seeds and 500 iterations. The terminal condition and truncation are heuristic.
 
-\paragraph{Future work.} Common noise via deep signatures~\cite{hu2025deep}; Nash vs Pareto comparison~\cite{cont2024dynamics}; higher-dimensional multi-asset formulations; systematic instability characterisation.
+\paragraph{Future work.} Distribution-dependent mean-field coupling via particle systems and empirical measure encoders; common noise via deep signatures~\cite{hu2025deep}; Nash vs Pareto comparison~\cite{cont2024dynamics}; higher-dimensional multi-asset formulations; systematic instability characterisation with more seeds and longer training.
 
 \paragraph{Code.} \url{https://github.com/cgarryZA/DeepBSDE}
 
