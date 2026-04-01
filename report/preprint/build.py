@@ -28,6 +28,13 @@ FIGURES = [
     "z_max_evolution.png",
 ]
 
+# Additional figures from other directories
+EXTRA_FIGURES = [
+    ("plots/comparison/fd_vs_deepbsde.png", "fd_vs_deepbsde.png"),
+    ("plots/baseline/fd_value_functions.png", "fd_value_functions.png"),
+    ("plots/baseline/fd_optimal_quotes.png", "fd_optimal_quotes.png"),
+]
+
 
 def main():
     parser = argparse.ArgumentParser(description="Build preprint PDF")
@@ -51,7 +58,17 @@ def main():
             copied += 1
         else:
             print(f"Warning: {src} not found, skipping")
-    print(f"Copied {copied}/{len(FIGURES)} figures to {fig_dir}")
+
+    # Copy extra figures from other directories
+    for src_rel, dst_name in EXTRA_FIGURES:
+        src = os.path.join(repo_root, src_rel)
+        dst = os.path.join(fig_dir, dst_name)
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+            copied += 1
+        else:
+            print(f"Warning: {src} not found, skipping")
+    print(f"Copied {copied} figures total to {fig_dir}")
 
     # Compile LaTeX (two passes)
     for pass_num in (1, 2):

@@ -284,6 +284,15 @@ Deep BSDE diffusion surrogate (5000 iter) & 0.457 & $3.4 \times 10^{-5}$ & 1.333
 
 \noindent ${}^*$Rescaled: $V_T(0) \approx V_\infty(0) \cdot (1 - e^{-rT})$. This is a heuristic correction assuming stationary running payoff, not a proved finite-horizon bound.
 
+\Cref{fig:comparison} shows the value function and optimal spread across inventory for all methods.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/fd_vs_deepbsde.png}
+  \caption{Left: value function $V(q)$ for FD ground truth (solid), diffusion surrogate (dashed), and point estimates from jump model and surrogate at $q = 0$. Right: optimal spread across inventory. The FD spread varies with $q$ ($1.43$--$1.47$); the surrogate is structurally constant at $2/\alpha = 1.333$.}
+  \label{fig:comparison}
+\end{figure}
+
 \paragraph{Key observations.}
 \begin{enumerate}
   \item The \textbf{jump model is more accurate} ($2.5\%$ error) than the surrogate ($5.5\%$), consistent with preserving discrete dynamics.
@@ -375,6 +384,22 @@ Exponential ($\gamma = 1$) & 4.384 & 1.483 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\Cref{fig:fd_baseline} shows the FD ground truth value functions and optimal quotes across all three penalty types.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/fd_value_functions.png}
+  \caption{FD ground truth: value functions $V(q)$ for quadratic, cubic, and exponential penalties. All peak at $q = 0$ and decay with increasing $|q|$.}
+  \label{fig:fd_baseline}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/fd_optimal_quotes.png}
+  \caption{FD ground truth: optimal quotes across inventory. Non-linear penalties produce wider spreads ($1.43 \to 1.48$) and more asymmetric ask/bid skew at large $|q|$.}
+  \label{fig:fd_quotes}
+\end{figure}
 
 At $\phi = 0.01$, all penalties converge stably. The $Y_0$ ordering matches FD ground truth. Non-linear penalties widen the FD optimal spread ($1.432 \to 1.483$), consistent with increased inventory aversion. The solver's instability under Lipschitz violations manifests only at larger $\phi$ or $\gamma$, where penalty gradients dominate execution revenue. A systematic characterisation is deferred to future work.
 
