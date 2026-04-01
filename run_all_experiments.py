@@ -293,6 +293,27 @@ def main():
     all_results["sensitivity_NT"] = nt_results
 
     # ================================================================
+    # 7. Mean-field proxy robustness: vary coupling update frequency
+    # ================================================================
+    print(f"\n{'='*60}")
+    print(f"7. Mean-field proxy robustness")
+    print(f"{'='*60}")
+    mf_results = []
+    for freq in [50, 100, 200, 500, 9999999]:
+        label = f"freq={freq}" if freq < 9999 else "no_coupling"
+        r = run_single(base_continuous, {
+            "eqn.type": 3 if freq < 9999 else 1,
+            "net.opt_config1.num_iterations": n_iters,
+            "net.opt_config1.freq_update_drift": freq,
+            "net.logging_frequency": n_iters,
+        }, device, label=label)
+        mf_results.append({
+            "freq": freq, "y0": r["y0"], "loss": r["final_loss"],
+            "label": label,
+        })
+    all_results["mf_proxy_robustness"] = mf_results
+
+    # ================================================================
     # Save all results
     # ================================================================
     elapsed = time.time() - start
