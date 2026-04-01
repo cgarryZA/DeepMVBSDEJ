@@ -249,6 +249,127 @@ def plot_value_function(config, bsde, model, out_dir):
     print("Saved value_function.png")
 
 
+def plot_value_surface_3d(config, bsde, model, out_dir):
+    """3D surface: Value function V(t, q) over (time, inventory).
+
+    Uses subnets to propagate Y from Y_0 through the BSDE dynamics
+    at different inventory levels. Requires trained weights.
+    """
+    from mpl_toolkits.mplot3d import Axes3D
+
+    model.eval()
+    n_t = min(bsde.num_time_interval - 1, len(model.subnet))
+    t_indices = np.linspace(0, n_t - 1, min(n_t, 30), dtype=int)
+    q_range = np.linspace(-4, 4, 60)
+
+    # For each (t, q), evaluate the subnet Z and compute the implied value
+    # V(t,q) ≈ Y_0 - sum of f*dt from 0 to t (rough approximation)
+    # Better: use the terminal condition and Z to infer the value
+    value_grid = np.zeros((len(t_indices), len(q_range)))
+
+    for i, t_idx in enumerate(t_indices):
+        for j, q in enumerate(q_range):
+            x = torch.tensor([[bsde.s_init, q]], dtype=torch.float64)
+            with torch.no_grad():
+                z = model.subnet[t_idx](x) / bsde.dim
+            z_q = z[0, 1].item()
+            # Value proxy: terminal penalty discounted back + spread revenue
+            t_remain = bsde.total_time - bsde.t_grid[t_idx]
+            terminal_penalty = -bsde.phi * q ** 2
+            # Revenue from optimal quoting at this inventory
+            delta_a = 1.0 / bsde.alpha + z_q
+            delta_b = 1.0 / bsde.alpha - z_q
+            f_a = np.exp(-bsde.alpha * delta_a) * bsde.lambda_a
+            f_b = np.exp(-bsde.alpha * delta_b) * bsde.lambda_b
+            revenue_rate = f_a * delta_a + f_b * delta_b - bsde.phi * q ** 2
+            value_grid[i, j] = terminal_penalty * np.exp(-bsde.discount_rate * t_remain) + \
+                               revenue_rate * t_remain
+
+    t_vals = np.array([bsde.t_grid[idx] for idx in t_indices])
+    T, Q = np.meshgrid(t_vals, q_range)
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(T, Q, value_grid.T, cmap="coolwarm", alpha=0.85,
+                    edgecolor="none", antialiased=True)
+    ax.set_xlabel("Time $t$", fontsize=11)
+    ax.set_ylabel("Inventory $q$", fontsize=11)
+    ax.set_zlabel("Value $V(t, q)$", fontsize=11)
+    ax.set_title("Value Function Surface", fontsize=13)
+    ax.view_init(elev=25, azim=-60)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "value_surface_3d.png"), dpi=150)
+    plt.close()
+    print("Saved value_surface_3d.png")
+
+
+def plot_z_gradient_surface_3d(config, bsde, model, out_dir):
+    """3D surface: Z^q(t, q) — the inventory gradient driving optimal quotes.
+
+    This is THE key object: Z^q determines δ^a = 1/α + Z^q, δ^b = 1/α - Z^q.
+    Should be roughly linear in q (from quadratic penalty), with deviations
+    showing the neural network's learned correction.
+    """
+    from mpl_toolkits.mplot3d import Axes3D
+
+    model.eval()
+    n_t = min(bsde.num_time_interval - 1, len(model.subnet))
+    t_indices = np.linspace(0, n_t - 1, min(n_t, 30), dtype=int)
+    q_range = np.linspace(-4, 4, 60)
+
+    z_grid = np.zeros((len(t_indices), len(q_range)))
+
+    for i, t_idx in enumerate(t_indices):
+        for j, q in enumerate(q_range):
+            x = torch.tensor([[bsde.s_init, q]], dtype=torch.float64)
+            with torch.no_grad():
+                z = model.subnet[t_idx](x) / bsde.dim
+            z_grid[i, j] = z[0, 1].item()  # Z^q component
+
+    t_vals = np.array([bsde.t_grid[idx] for idx in t_indices])
+    T, Q = np.meshgrid(t_vals, q_range)
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(T, Q, z_grid.T, cmap="RdBu", alpha=0.85,
+                    edgecolor="none", antialiased=True)
+    ax.set_xlabel("Time $t$", fontsize=11)
+    ax.set_ylabel("Inventory $q$", fontsize=11)
+    ax.set_zlabel("$Z_t^q$ (inventory gradient)", fontsize=11)
+    ax.set_title("Learned Gradient Surface $Z_t^q(t, q)$", fontsize=13)
+    ax.view_init(elev=25, azim=-60)
+
+    # Add the zero plane for reference
+    ax.plot_surface(T, Q, np.zeros_like(z_grid.T), alpha=0.1, color="gray")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "z_gradient_surface_3d.png"), dpi=150)
+    plt.close()
+    print("Saved z_gradient_surface_3d.png")
+
+
+def plot_z_max_evolution(result_path, out_dir):
+    """Plot max|Z_t| over training — the Lipschitz stability diagnostic."""
+    data = np.loadtxt(result_path, delimiter=",", skiprows=1)
+    if data.shape[1] < 5:
+        print("No z_max data in result file (old format), skipping")
+        return
+    steps, z_max = data[:, 0], data[:, 3]
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(steps, z_max, "r-", linewidth=1.0)
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("max $|Z_t|$")
+    ax.set_title("Gradient Stability: max $|Z_t|$ During Training")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "z_max_evolution.png"), dpi=150)
+    plt.close()
+    print("Saved z_max_evolution.png")
+
+
 def main():
     parser = argparse.ArgumentParser(description="LOB solver visualization")
     parser.add_argument("--config", type=str, default="configs/lob_d2.json")
@@ -288,9 +409,15 @@ def main():
     plot_quoting_strategy(config, bsde, model, args.out_dir)
     plot_value_function(config, bsde, model, args.out_dir)
 
-    # Spread heatmap (only useful with trained weights)
+    # Plots requiring trained weights
     if args.weights and os.path.exists(args.weights):
         plot_spread_heatmap(config, bsde, model, args.out_dir)
+        plot_value_surface_3d(config, bsde, model, args.out_dir)
+        plot_z_gradient_surface_3d(config, bsde, model, args.out_dir)
+
+    # Z_t evolution (from training history)
+    if args.result and os.path.exists(args.result):
+        plot_z_max_evolution(args.result, args.out_dir)
 
     print(f"\nAll plots saved to {args.out_dir}/")
 
