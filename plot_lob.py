@@ -28,22 +28,34 @@ import equations
 from solver import ContXiongLOBModel
 
 
-def plot_training_history(result_path, out_dir):
-    """Plot loss convergence from training result file."""
+def plot_training_history(result_path, out_dir, jump_result_path=None):
+    """Plot loss convergence from training result file.
+    Optionally overlay jump model convergence for comparison."""
     data = np.loadtxt(result_path, delimiter=",", skiprows=1)
-    steps, loss, y0, elapsed = data[:, 0], data[:, 1], data[:, 2], data[:, 3]
+    steps, loss, y0 = data[:, 0], data[:, 1], data[:, 2]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
     # Loss curve
-    axes[0].semilogy(steps, loss, "b-", linewidth=0.8)
+    axes[0].semilogy(steps, loss, "b-", linewidth=0.8, label="Diffusion surrogate")
+    if jump_result_path and os.path.exists(jump_result_path):
+        jdata = np.loadtxt(jump_result_path, delimiter=",", skiprows=1)
+        axes[0].semilogy(jdata[:, 0], jdata[:, 1], "r-", linewidth=0.8,
+                         alpha=0.8, label="Jump model")
+        axes[0].legend(fontsize=9)
     axes[0].set_xlabel("Training step")
     axes[0].set_ylabel("Loss (log scale)")
     axes[0].set_title("Training Convergence")
     axes[0].grid(True, alpha=0.3)
 
     # Y0 evolution
-    axes[1].plot(steps, y0, "r-", linewidth=0.8)
+    axes[1].plot(steps, y0, "b-", linewidth=0.8, label="Diffusion surrogate")
+    if jump_result_path and os.path.exists(jump_result_path):
+        jdata = np.loadtxt(jump_result_path, delimiter=",", skiprows=1)
+        axes[1].plot(jdata[:, 0], jdata[:, 2], "r-", linewidth=0.8,
+                     alpha=0.8, label="Jump model")
+        axes[1].legend(fontsize=9)
+    axes[1].axhline(y=0.433, color="k", linestyle=":", alpha=0.5, label="FD ground truth")
     axes[1].set_xlabel("Training step")
     axes[1].set_ylabel("$Y_0$ (value function at $t=0$)")
     axes[1].set_title("Initial Value Function")
@@ -435,6 +447,8 @@ def main():
                         help="Path to training result .txt file")
     parser.add_argument("--weights", type=str, default=None,
                         help="Path to saved model .pt file")
+    parser.add_argument("--jump_result", type=str, default=None,
+                        help="Path to jump model result .txt for comparison overlay")
     parser.add_argument("--out_dir", type=str, default="./plots")
     args = parser.parse_args()
 
@@ -457,7 +471,8 @@ def main():
 
     # Plot training history if result file exists
     if args.result and os.path.exists(args.result):
-        plot_training_history(args.result, args.out_dir)
+        plot_training_history(args.result, args.out_dir,
+                              jump_result_path=args.jump_result)
 
     # Plot sample paths and distributions (no trained model needed)
     plot_sample_paths(bsde, args.out_dir)
