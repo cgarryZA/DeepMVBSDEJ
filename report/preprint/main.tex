@@ -65,7 +65,7 @@ No published work applies the Deep BSDE framework to limit order book market-mak
 \paragraph{Contribution.} This is a computational study, not a claim of a fully validated method. We:
 \begin{enumerate}
   \item Formulate a \textbf{deep jump-BSDE solver} for the Cont--Xiong market-making model, preserving discrete Poisson inventory dynamics (\Cref{sec:jump}). The neural network outputs $(Z_t, U_t^+, U_t^-)$ and optimal quotes are extracted from the value increments.
-  \item Validate against \textbf{finite-difference policy iteration} solving the exact discrete HJB (\Cref{sec:fd}), achieving $2.5\%$ error in $Y_0$.
+  \item Validate against a \textbf{matched finite-horizon finite-difference baseline} (\Cref{sec:fd}), achieving $<0.1\%$ value error for the surrogate and demonstrating that forward policy simulation captures $99.3\%$ of FD-optimal P\&L.
   \item Compare against a \textbf{diffusion surrogate baseline} and show it distorts the optimal control: the spread is $1.333$ vs ground-truth $1.432$ (\Cref{sec:surrogate}).
   \item Conduct preliminary \textbf{stress tests} under non-linear inventory penalties (\Cref{sec:stress}).
 \end{enumerate}
@@ -124,6 +124,24 @@ Analogously for the bid, the optimand is $e^{-\alpha\delta^b}(\delta^b\Delta + V
   \delta^{b*} = \frac{1}{\alpha} - \frac{V(q+\Delta) - V(q)}{\Delta}.
 \end{equation}
 At $q = 0$ with symmetric $V$, both quotes equal $1/\alpha$ and the total spread is $2/\alpha$.
+
+\subsection{Dimensional Reduction}
+
+\begin{proposition}[Price is economically inert]\label{prop:1d}
+Under the model of \Cref{sec:model}, with driftless price $\dd S_t = \sigma \, \dd W_t^S$, execution rates $\nu^{a,b}$ independent of $S$, and wealth process $\dd X_t = \delta^a\Delta\,\dd N^a + \delta^b\Delta\,\dd N^b + q_t\,\dd S_t$, the value function for the objective $\max\,\E[X_T + q_T S_T - \psi(q_T)]$ decomposes as
+\begin{equation}\label{eq:1d_reduction}
+  V(t, x, s, q) = x + qs + \phi(t, q),
+\end{equation}
+where $\phi(t, q)$ solves a one-dimensional HJB in $(t, q)$ only. The optimal quotes $\delta^{a*}, \delta^{b*}$ are independent of $S$.
+\end{proposition}
+
+\begin{proof}
+Cash $X_t$ enters the objective and dynamics linearly, so $V$ is affine in $x$: $V = x + v(t, s, q)$. Since $S_t$ is a martingale and $q$ evolves independently of $W^S$ (execution rates are $S$-independent), we have $\E[q_T S_T \mid S_t = s, q_t = q] = s \cdot \E[q_T \mid q_t = q]$ by independence. Therefore $v(t, s, q) = qs + \phi(t, q)$ where $\phi$ captures expected future trading profits minus penalties. Since neither the execution rates nor $\phi$ depend on $S$, the optimal quotes are $S$-independent.
+\end{proof}
+
+\begin{remark}
+This reduction is specific to our assumptions. Introducing price-dependent execution (adverse selection), predictive signals, or stochastic volatility would break the decomposition and make $S$ genuinely active. We leave such extensions to future work.
+\end{remark}
 
 % ============================================================
 \section{Jump-BSDE Formulation (Primary Method)}
@@ -192,7 +210,7 @@ The implemented surrogate therefore uses three compounded approximations: moment
     + \lambda^a f_a \delta^a + \lambda^b f_b \delta^b
   \Bigr] - rV - \psi = 0.
 \end{equation}
-After substituting the first-order quote ansatz $\delta^{a} = 1/\alpha + \partial_q V$, $\delta^{b} = 1/\alpha - \partial_q V$ (inherited from the discrete FOC, \emph{not} the exact optimiser of~\eqref{eq:surrogate_pde} which would include a $\partial_{qq}V$ correction), the PDE becomes semilinear in $(V, \partial_q V)$ with a frozen diffusion coefficient. Under standard regularity assumptions, a formal Feynman--Kac representation then gives the BSDE:
+After substituting the first-order quote ansatz $\delta^{a} = 1/\alpha + \partial_q V$, $\delta^{b} = 1/\alpha - \partial_q V$ (inherited from the discrete FOC, \emph{not} the exact optimiser of~\eqref{eq:surrogate_pde} which would include a $\partial_{qq}V$ correction), the PDE becomes semilinear in $(V, \partial_q V)$ with a frozen diffusion coefficient. After this further approximation, the resulting \emph{approximate semilinear PDE} (not the original surrogate~\eqref{eq:surrogate_pde}) admits a formal Feynman--Kac BSDE representation:
 \begin{equation}\label{eq:bsde_surrogate}
   \dd Y_t = -f(t, X_t, Y_t, Z_t) \, \dd t + Z_t^S \, \dd W_t^S + Z_t^q \, \dd W_t^q,
 \end{equation}
@@ -440,7 +458,7 @@ At $\phi = 0.01$, all penalties converge stably. The $Y_0$ ordering matches FD g
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have implemented a deep jump-BSDE solver for optimal market-making that preserves the discrete Poisson dynamics of the Cont--Xiong dealer market model. Against finite-difference ground truth, the jump formulation achieves $2.5\%$ value accuracy, outperforming a diffusion surrogate ($5.5\%$). The surrogate's $6.9\%$ spread distortion demonstrates that moment matching of the state process does not preserve optimal controls --- a negative result that is itself informative.
+We have implemented two deep BSDE solvers for optimal market-making in the Cont--Xiong dealer market model: a jump-aware formulation (FBSDEJ) preserving discrete Poisson dynamics, and a diffusion surrogate for comparison. Against a matched finite-horizon finite-difference baseline, the surrogate achieves $<0.1\%$ value error at $q = 0$ and its learned policy captures $99.3\%$ of the FD-optimal P\&L in forward simulation. However, the surrogate's structurally constant spread ($2/\alpha = 1.333$) differs from the FD spread ($1.370$) by $2.7\%$, demonstrating that \emph{accurate value approximation does not guarantee accurate control recovery} --- the diffusion surrogate solves a different control problem from the original discrete game. The jump model ($2.8\%$ value error) is numerically less accurate due to higher Poisson training variance but preserves the discrete control structure.
 
 \paragraph{Limitations.} The experiments are at $d = 2$ where finite differences are superior. The mean-field coupling is moment-based, not distribution-dependent. The stress tests are preliminary (single seed, small $\phi$). The terminal condition and truncation are heuristic.
 
