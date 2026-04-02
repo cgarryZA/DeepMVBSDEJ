@@ -7,9 +7,9 @@ __pycache__/
 *.pyc
 *.pyo
 
-# LaTeX
-/report/
+# LaTeX build artifacts (but track source)
 *.aux
 *.log
 *.out
 *.synctex.gz
+report/preprint/*.pdf
