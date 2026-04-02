@@ -1291,3 +1291,285 @@ class ContXiongLOBJumpSolver:
             "y0": self.y_init.item(),
             "final_loss": val_loss.item(),
         }
+
+
+# =====================================================================
+# McKean-Vlasov LOB Model and Solver
+# =====================================================================
+
+
+class ContXiongLOBMVModel(nn.Module):
+    """Deep BSDE model with distribution-dependent mean-field coupling.
+
+    Key difference from ContXiongLOBModel: subnets take
+    (S_i, q_i, Phi(mu_t)) as input, where Phi is a law embedding
+    computed from all particles at the current timestep.
+
+    The law encoder is part of the model and its gradients flow
+    through the BSDE loss (for DeepSets encoder).
+    """
+
+    def __init__(self, config, bsde, device=None):
+        super().__init__()
+        self.eqn_config = config.eqn
+        self.net_config = config.net
+        self.bsde = bsde
+        self.device = device or torch.device("cpu")
+        dtype = torch.float64
+
+        # Law encoder (from the equation)
+        self.law_encoder = bsde.law_encoder
+        law_dim = bsde.law_embed_dim
+
+        # Subnet input: own state (2) + law embedding (law_dim)
+        subnet_in = 2 + law_dim
+        subnet_out = 2  # (Z^S, Z^q)
+
+        self.y_init = nn.Parameter(
+            torch.tensor(
+                np.random.uniform(
+                    low=self.net_config.y_init_range[0],
+                    high=self.net_config.y_init_range[1],
+                    size=[1],
+                ),
+                dtype=dtype,
+            )
+        )
+        self.z_init = nn.Parameter(
+            torch.tensor(
+                np.random.uniform(low=-0.1, high=0.1, size=[1, 2]),
+                dtype=dtype,
+            )
+        )
+        self.subnet = nn.ModuleList(
+            [
+                FeedForwardSubNet(
+                    self.net_config.num_hiddens, subnet_in, subnet_out, dtype=dtype,
+                )
+                for _ in range(bsde.num_time_interval - 1)
+            ]
+        )
+
+    def forward(self, inputs):
+        dw, x, mean_y_input = inputs
+        dw = torch.as_tensor(dw, dtype=torch.float64, device=self.device)
+        x = torch.as_tensor(x, dtype=torch.float64, device=self.device)
+
+        loss_inter = torch.tensor(0.0, dtype=torch.float64, device=self.device)
+        mean_y = []
+        time_stamp = np.arange(0, self.eqn_config.num_time_interval) * self.bsde.delta_t
+        batch_size = dw.shape[0]
+
+        all_one = torch.ones(batch_size, 1, dtype=torch.float64, device=self.device)
+        y = all_one * self.y_init
+        z = all_one @ self.z_init  # [batch, 2]
+        mean_y.append(torch.mean(y))
+
+        # Diagnostics
+        mean_spreads = []
+        mean_inventories = []
+        z_max_history = []
+        law_embeddings = []
+
+        for t in range(self.bsde.num_time_interval - 1):
+            # Track statistics
+            z_q = z[:, 1:2]
+            delta_a, delta_b = self.bsde._optimal_quotes_tf(z_q)
+            mean_spreads.append((torch.mean(delta_a) + torch.mean(delta_b)).item())
+            mean_inventories.append(torch.mean(x[:, 1, t]).item())
+            z_max_history.append(torch.max(torch.abs(z)).item())
+
+            # === MV COUPLING: compute law embedding from batch particles ===
+            particles_t = x[:, :, t]  # [batch, 2] at time t
+            law_embed = self.law_encoder.encode(particles_t)  # [law_dim]
+            # Broadcast to all agents: [batch, law_dim]
+            law_embed_batch = law_embed.unsqueeze(0).expand(batch_size, -1)
+            law_embeddings.append(law_embed.detach().cpu().numpy())
+
+            # BSDE step
+            y = (
+                y
+                - self.bsde.delta_t * self.bsde.f_tf(time_stamp[t], x[:, :, t], y, z)
+                + torch.sum(z * dw[:, :, t], dim=1, keepdim=True)
+            )
+            mean_y.append(torch.mean(y))
+
+            # === Subnet input: own state + law embedding ===
+            own_state = x[:, :, t + 1]  # [batch, 2]
+            subnet_input = torch.cat([own_state, law_embed_batch], dim=1)  # [batch, 2+law_dim]
+            z = self.subnet[t](subnet_input) / self.bsde.dim
+
+        # Terminal step
+        z_q = z[:, 1:2]
+        delta_a, delta_b = self.bsde._optimal_quotes_tf(z_q)
+        mean_spreads.append((torch.mean(delta_a) + torch.mean(delta_b)).item())
+        mean_inventories.append(torch.mean(x[:, 1, -2]).item())
+        z_max_history.append(torch.max(torch.abs(z)).item())
+
+        y = (
+            y
+            - self.bsde.delta_t
+            * self.bsde.f_tf(time_stamp[-1], x[:, :, -2], y, z)
+            + torch.sum(z * dw[:, :, -1], dim=1, keepdim=True)
+        )
+
+        self._last_mean_spreads = mean_spreads
+        self._last_mean_inventories = mean_inventories
+        self._last_z_max = z_max_history
+        self._last_z_max_overall = max(z_max_history) if z_max_history else 0.0
+        self._last_law_embeddings = law_embeddings
+
+        return y, mean_y, loss_inter
+
+
+class ContXiongLOBMVSolver:
+    """Trains ContXiongLOBMVModel with distribution-dependent coupling.
+
+    Differences from ContXiongLOBSolver:
+    - Law encoder parameters are part of the optimizer
+    - Wasserstein distance tracked across fictitious play iterations
+    - Full particle snapshots stored for diagnostics
+    """
+
+    def __init__(self, config, bsde, device=None):
+        self.eqn_config = config.eqn
+        self.net_config = config.net
+        self.bsde = bsde
+        self.device = device or torch.device("cpu")
+
+        self.model = ContXiongLOBMVModel(config, bsde, device=self.device)
+        self.model.to(self.device)
+        self.opt_config = self.net_config.opt_config1
+        self.y_init = self.model.y_init
+
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.opt_config.lr_values[0], eps=1e-8
+        )
+        self.scheduler = make_piecewise_lr_scheduler(
+            self.optimizer, self.opt_config.lr_boundaries, self.opt_config.lr_values
+        )
+
+    def loss_fn(self, inputs):
+        y_terminal, mean_y, loss_inter = self.model(inputs)
+        dw, x, mean_y_input = inputs
+        x = torch.as_tensor(x, dtype=torch.float64, device=self.device)
+        y_target = self.bsde.g_tf(self.bsde.total_time, x[:, :, -1])
+        delta = y_terminal - y_target
+        mean_y.append(torch.mean(y_target))
+        loss = loss_inter + torch.mean(
+            torch.where(
+                torch.abs(delta) < DELTA_CLIP,
+                delta ** 2,
+                2 * DELTA_CLIP * torch.abs(delta) - DELTA_CLIP ** 2,
+            )
+        )
+        return loss, mean_y
+
+    def train(self):
+        start_time = time.time()
+        training_history = []
+        w2_history = []
+        valid_data = self.bsde.sample(self.net_config.valid_size)
+        mean_y_train = np.zeros(self.bsde.num_time_interval + 2)
+
+        for step in range(self.opt_config.num_iterations + 1):
+            # Mean-field update with Wasserstein tracking
+            if (
+                self.eqn_config.type == 3
+                and step % self.opt_config.freq_update_drift == 0
+                and step > 0
+            ):
+                if hasattr(self.model, "_last_mean_spreads"):
+                    self.bsde.update_mean_field(
+                        self.model._last_mean_spreads,
+                        self.model._last_mean_inventories,
+                    )
+
+                    # W2 tracking on particle snapshots
+                    last_x = valid_data[1]  # [batch, 2, T+1]
+                    particles = last_x[:, :, -1].T if isinstance(last_x, np.ndarray) else last_x[:, :, -1].cpu().numpy()
+                    if particles.shape[1] == 2:
+                        self.bsde.update_mean_field_mv(particles)
+                        w2 = self.bsde._w2_history[-1] if self.bsde._w2_history else 0.0
+                        w2_history.append({"step": step, "w2": w2})
+                        logging.info("  [MV update] step %d: W2=%.6f" % (step, w2))
+
+                self.bsde.update_drift()
+                valid_data = self.bsde.sample(self.net_config.valid_size, seed=1)
+
+            # Resample
+            if step % self.opt_config.freq_resample == 0:
+                train_data = self.bsde.sample(self.net_config.batch_size)
+                train_data = (train_data[0], train_data[1], mean_y_train)
+
+            # Training step
+            self.model.train()
+            self.optimizer.zero_grad()
+            loss, mean_y = self.loss_fn(train_data)
+            loss.backward()
+            self.optimizer.step()
+            self.scheduler.step()
+
+            mean_y_train = np.array([m.item() for m in mean_y])
+
+            # Logging
+            if step % self.net_config.logging_frequency == 0:
+                self.model.eval()
+                with torch.no_grad():
+                    val_loss, val_mean_y = self.loss_fn(
+                        (valid_data[0], valid_data[1], mean_y_train)
+                    )
+                val_loss = val_loss.item()
+                y_init_val = self.y_init.item()
+                elapsed = time.time() - start_time
+
+                diag_info = ""
+                z_max_val = 0.0
+                if hasattr(self.model, "_last_mean_spreads") and self.model._last_mean_spreads:
+                    avg_spread = np.mean(self.model._last_mean_spreads)
+                    z_max_val = self.model._last_z_max_overall
+                    diag_info = "  spread: %.4f  max|Z|: %.4f" % (avg_spread, z_max_val)
+
+                training_history.append(
+                    [step, val_loss, y_init_val, z_max_val, elapsed]
+                )
+                if self.net_config.verbose:
+                    logging.info(
+                        "step: %5u,    loss: %.4e, Y0: %.4e,%s    elapsed time: %3u"
+                        % (step, val_loss, y_init_val, diag_info, elapsed)
+                    )
+
+        # Final validation
+        valid_data = self.bsde.sample(self.net_config.valid_size * 10)
+        self.model.eval()
+        with torch.no_grad():
+            val_loss, _ = self.loss_fn(
+                (valid_data[0], valid_data[1], mean_y_train)
+            )
+
+        print("\n=== Cont-Xiong LOB MV Results ===")
+        print("Final Y0: %.6f" % self.y_init.item())
+        print("Final loss: %.6e" % val_loss.item())
+        print("Law encoder: %s (embed_dim=%d)" % (
+            self.eqn_config.law_encoder_type, self.bsde.law_embed_dim))
+        if w2_history:
+            print("Final W2 residual: %.6f" % w2_history[-1]["w2"])
+        if hasattr(self.model, "_last_mean_spreads") and self.model._last_mean_spreads:
+            print("Mean bid-ask spread: %.4f" % np.mean(self.model._last_mean_spreads))
+
+        if hasattr(self, '_save_path'):
+            torch.save({
+                "model_state": self.model.state_dict(),
+                "y0": self.y_init.item(),
+                "final_loss": val_loss.item(),
+                "w2_history": w2_history,
+                "law_encoder_type": self.eqn_config.law_encoder_type,
+            }, self._save_path)
+            logging.info("Model saved to %s" % self._save_path)
+
+        return {
+            "history": np.array(training_history),
+            "y0": self.y_init.item(),
+            "final_loss": val_loss.item(),
+            "w2_history": w2_history,
+        }

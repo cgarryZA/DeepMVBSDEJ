@@ -37,6 +37,10 @@ class EqnConfig:
     # Penalty type: "quadratic", "cubic", "exponential"
     penalty_type: str = "quadratic"
     gamma: float = 1.0  # for exponential penalty
+    # McKean-Vlasov law encoder
+    law_encoder_type: str = "moments"
+    law_embed_dim: int = 16
+    n_bins: int = 20
 
 
 @dataclass

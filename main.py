@@ -15,7 +15,8 @@ from config import Config
 from registry import EQUATION_REGISTRY
 import equations  # triggers @register_equation decorators
 from solver import (SineBMSolver, SineBMDBDPSolver, FlockSolver,
-                     ContXiongLOBSolver, ContXiongLOBJumpSolver)
+                     ContXiongLOBSolver, ContXiongLOBJumpSolver,
+                     ContXiongLOBMVSolver)
 
 
 def main():
@@ -85,6 +86,9 @@ def main():
     elif config.eqn.eqn_name == "contxiong_lob_jump":
         solver = ContXiongLOBJumpSolver(config, bsde, device=device)
         solver._save_path = "{}_model.pt".format(path_prefix)
+    elif config.eqn.eqn_name == "contxiong_lob_mv":
+        solver = ContXiongLOBMVSolver(config, bsde, device=device)
+        solver._save_path = "{}_model.pt".format(path_prefix)
     else:
         raise ValueError(f"No solver for equation '{config.eqn.eqn_name}'")
 
@@ -119,13 +123,20 @@ def main():
             header="step,loss_function,Y0_init,z_max,elapsed_time",
             comments="",
         )
-    elif config.eqn.eqn_name == "contxiong_lob_jump":
+    elif config.eqn.eqn_name in ("contxiong_lob_jump", "contxiong_lob_mv"):
+        fmt = ["%d", "%.5e", "%.5e"]
+        header = "step,loss_function,Y0_init"
+        if result["history"].shape[1] > 3:
+            fmt.append("%.5e")
+            header += ",z_max"
+        fmt.append("%d")
+        header += ",elapsed_time"
         np.savetxt(
             "{}_result.txt".format(path_prefix),
             result["history"],
-            fmt=["%d", "%.5e", "%.5e", "%d"],
+            fmt=fmt,
             delimiter=",",
-            header="step,loss_function,Y0_init,elapsed_time",
+            header=header,
             comments="",
         )
 
