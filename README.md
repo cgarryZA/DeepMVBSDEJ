@@ -1,45 +1,47 @@
-# Deep MV-BSDE Solver for Limit Order Book Market-Making
+# A Deep Jump-BSDE Solver for Optimal Market-Making in Limit Order Books
 
-A PyTorch implementation of the Deep Mean-Field BSDE method applied to optimal market-making in limit order books, based on the Cont-Xiong (2024) dealer market model.
+**[Read the paper (PDF)](paper.pdf)**
 
-The solver recovers optimal bid-ask quotes directly from the learned gradient process $Z_t$ of the value function, using the Han-Hu-Long (2022) fictitious play architecture for McKean-Vlasov FBSDEs. Both a continuous inventory relaxation (Option A) and an exact jump-diffusion formulation (Option B / FBSDEJ) are implemented.
+A PyTorch implementation of a deep BSDE-inspired solver for optimal market-making, preserving the discrete Poisson inventory jump structure of the Cont-Xiong (2024) dealer market model. Validated against finite-difference ground truth with cross-dynamics policy evaluation.
 
 ## Key Results
 
-| Metric | Value |
-|--------|-------|
-| Optimal spread | $2/\alpha = 1.333$ (exact A-S recovery) |
-| Final loss | $3.3 \times 10^{-5}$ (5000 iterations) |
-| Value function $Y_0$ | 0.456 (matches finite-horizon theory 0.467) |
-| max $\|Z_t\|$ | 0.07 (stable, no gradient explosion) |
+| Method | Y₀ | Loss | Spread | Error vs FD |
+|--------|-----|------|--------|-------------|
+| FD finite-horizon (ground truth) | **0.457** | exact | 1.370 | — |
+| Deep BSDE surrogate (5 seeds) | 0.457 ± 0.000 | 3.4e-05 | 1.333 | <0.1% |
+| Deep BSDE jump (5 seeds) | 0.446 ± 0.002 | 2.2e-05 | discrete | 2.4% |
 
-## Mathematical Formulation
+**Core finding:** Accurate value approximation does not guarantee accurate control recovery — the surrogate achieves <0.1% value error but 2.7% spread distortion. Despite this, a surrogate-trained policy deployed under true Poisson execution captures 99.3% of FD-optimal P&L.
 
-### Forward SDE (continuous relaxation)
+## Figures
 
-$$dS_t = \sigma \, dW_t^S$$
+### Training and Quoting
+<p float="left">
+<img src="plots/convergence.png" width="48%" />
+<img src="plots/quoting_strategy.png" width="48%" />
+</p>
 
-$$dq_t = \bigl(\lambda^b f_b(\delta_t^b, \mu_t) - \lambda^a f_a(\delta_t^a, \mu_t)\bigr) dt + \sqrt{\lambda^b f_b + \lambda^a f_a} \, dW_t^q$$
+### Value Function and Ground Truth Comparison
+<p float="left">
+<img src="plots/value_function.png" width="48%" />
+<img src="plots/fd_vs_deepbsde.png" width="48%" />
+</p>
 
-where $f(\delta) = e^{-\alpha\delta} \cdot h(\mu_t)$ is the execution probability with mean-field competitive factor.
+### Gradient Surface and Quote Skew
+<p float="left">
+<img src="plots/z_gradient_surface_3d.png" width="48%" />
+<img src="plots/spread_heatmap.png" width="48%" />
+</p>
 
-### Optimal Quotes (from HJB first-order condition)
+### Breaking Points and Sensitivity
+<p float="left">
+<img src="plots/breaking_point.png" width="48%" />
+<img src="plots/sensitivity.png" width="48%" />
+</p>
 
-$$\delta_t^{a*} = \frac{1}{\alpha} + Z_t^q, \qquad \delta_t^{b*} = \frac{1}{\alpha} - Z_t^q$$
-
-The neural network learns $Z_t^q$ (the inventory gradient of the value function), and optimal quotes emerge directly from this gradient --- recovering the Avellaneda-Stoikov (2008) result as a special case.
-
-### BSDE Generator
-
-$$f(t,x,y,z) = -ry - \psi(q) + \lambda^a f_a(\delta^{a*})\delta^{a*} + \lambda^b f_b(\delta^{b*})\delta^{b*}$$
-
-### Inventory Penalties (configurable)
-
-| Type | Formula | Monotonicity |
-|------|---------|-------------|
-| Quadratic | $\psi(q) = \phi q^2$ | Preserved |
-| Cubic | $\psi(q) = \phi q^2 + \frac{\phi}{3}\|q\|^3$ | Broken |
-| Exponential | $\psi(q) = \phi(e^{\gamma\|q\|} - 1)$ | Severely broken |
+### Policy Simulation
+<img src="plots/policy_simulation.png" width="70%" />
 
 ## Installation
 
@@ -49,7 +51,7 @@ cd DeepBSDE
 pip install torch numpy matplotlib
 ```
 
-For GPU support (recommended for stress tests):
+For GPU support:
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu124
 ```
@@ -58,49 +60,65 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 **Train the continuous LOB solver:**
 ```bash
-python main.py --config configs/lob_d2.json --exp_name lob_demo --log_dir ./logs --device auto
+python main.py --config configs/lob_d2.json --exp_name demo --log_dir ./logs --device auto
 ```
 
-**Generate thesis-quality plots:**
+**Train the jump-diffusion solver:**
 ```bash
-python plot_lob.py --config configs/lob_d2.json \
-    --result logs/lob_demo_result.txt \
-    --weights logs/lob_demo_model.pt \
-    --out_dir plots/demo
+python main.py --config configs/lob_d2_jump.json --exp_name jump_demo --log_dir ./logs --device auto
 ```
 
-**Run the full experiment suite** (A-S benchmark, mean-field, N-particle scaling, phi stress tests):
+**Generate plots:**
 ```bash
-python run_experiments.py           # full suite (~1 hour)
-python run_experiments.py --quick   # debug mode (~10 min)
+python scripts/plot_lob.py --config configs/lob_d2.json \
+    --result logs/demo_result.txt \
+    --weights logs/demo_model.pt \
+    --out_dir plots
 ```
 
-**Find the solver's breaking point** (binary search for gradient explosion):
+**Run the full experiment suite:**
 ```bash
-python find_breaking_point.py --param gamma --lo 0.1 --hi 5.0 --penalty exponential
+python scripts/run_all_experiments.py --device cuda        # full (5 seeds, ~12 hours)
+python scripts/run_all_experiments.py --quick --device cuda  # quick (2 seeds, ~1.5 hours)
+```
+
+**Find the solver's breaking point:**
+```bash
+python scripts/find_breaking_point.py --param gamma --lo 0.1 --hi 5.0 --penalty exponential
+```
+
+**Forward policy simulation:**
+```bash
+python scripts/simulate_policy.py --weights logs/demo_model.pt
 ```
 
 ## Repository Structure
 
 ```
 DeepBSDE/
-├── main.py                          # Entry point
+├── paper.pdf                        # Preprint (14 pages)
+├── main.py                          # Training entry point
 ├── solver.py                        # All model + solver classes
 ├── config.py                        # Configuration dataclasses
-├── registry.py                      # Equation registration decorator
+├── registry.py                      # Equation registration
 ├── equations/
 │   ├── base.py                      # Abstract base class
 │   ├── sinebm.py                    # Sine-BM benchmark (Han-Hu-Long 2022)
 │   ├── flocking.py                  # Cucker-Smale MFG
-│   ├── contxiong_lob.py             # Cont-Xiong LOB (Option A: continuous)
-│   └── contxiong_lob_jump.py        # Cont-Xiong LOB (Option B: FBSDEJ)
-├── configs/
-│   ├── lob_d2.json                  # Main LOB config (Type 3 mean-field)
-│   ├── lob_d2_no_competition.json   # A-S benchmark (Type 1, no mean-field)
-│   └── lob_d2_jump.json             # Jump-diffusion config
-├── plot_lob.py                      # Visualization suite (9 plot types)
-├── run_experiments.py               # Full experiment runner
-└── find_breaking_point.py           # Automated stability threshold finder
+│   ├── contxiong_lob.py             # Diffusion surrogate (Option A)
+│   └── contxiong_lob_jump.py        # Jump-BSDE solver (Option B)
+├── configs/                         # JSON experiment configs
+├── scripts/
+│   ├── plot_lob.py                  # Main visualization suite
+│   ├── plot_experiments.py          # Experiment result plots
+│   ├── plot_grid_comparison.py      # FD vs BSDE full-grid comparison
+│   ├── simulate_policy.py           # Forward P&L simulation
+│   ├── find_breaking_point.py       # Binary search for instability
+│   ├── finite_difference_baseline.py        # Stationary FD solver
+│   ├── finite_difference_finite_horizon.py  # Matched finite-horizon FD
+│   ├── run_experiments.py           # Basic experiment runner
+│   └── run_all_experiments.py       # Full experiment suite
+└── plots/                           # Generated figures
 ```
 
 ## Configuration
@@ -113,31 +131,16 @@ Key parameters in `configs/lob_d2.json`:
 | `lambda_a`, `lambda_b` | 1.0 | Order arrival rates |
 | `alpha` | 1.5 | Execution probability decay |
 | `phi` | 0.01 | Inventory penalty coefficient |
-| `discount_rate` | 0.1 | Discount rate $r$ |
+| `discount_rate` | 0.1 | Discount rate r |
 | `penalty_type` | `"quadratic"` | `"quadratic"`, `"cubic"`, or `"exponential"` |
-| `type` | 3 | 1 = no coupling, 3 = mean-field fictitious play |
 | `num_time_interval` | 50 | Euler-Maruyama time steps |
-
-## Plots Generated
-
-| Plot | Description |
-|------|-------------|
-| `convergence.png` | Loss and $Y_0$ vs training step |
-| `z_max_evolution.png` | max $\|Z_t\|$ over training (Lipschitz diagnostic) |
-| `quoting_strategy.png` | Optimal spread vs inventory |
-| `spread_heatmap.png` | Spread surface over (time, inventory) |
-| `value_surface_3d.png` | 3D value function $V(t, q)$ |
-| `z_gradient_surface_3d.png` | 3D gradient surface $Z_t^q(t, q)$ |
-| `sample_paths.png` | Price and inventory trajectories |
-| `inventory_distribution.png` | Terminal inventory distribution |
-| `value_function.png` | $V(q)$ cross-section with theory comparison |
 
 ## Citation
 
 ```bibtex
 @misc{garry2026deepbsdelob,
   author       = {Christian Garry},
-  title        = {Deep Mean-Field {BSDE} Methods for Optimal Market-Making
+  title        = {A Deep Jump-{BSDE} Solver for Optimal Market-Making
                   in Limit Order Books},
   year         = {2026},
   howpublished = {\url{https://github.com/cgarryZA/DeepBSDE}},
@@ -146,12 +149,11 @@ Key parameters in `configs/lob_d2.json`:
 
 ## References
 
-- Cont, R. & Xiong, W. (2024). Dynamics of market making algorithms in dealer markets. *Mathematical Finance*, 34:467--521.
-- Han, J., Hu, R. & Long, J. (2022). Learning high-dimensional McKean-Vlasov forward-backward SDEs. *SIAM J. Numer. Anal.*
-- Han, J., Jentzen, A. & E, W. (2018). Solving high-dimensional PDEs using deep learning. *PNAS*, 115(34):8505--8510.
-- Avellaneda, M. & Stoikov, S. (2008). High-frequency trading in a limit order book. *Quantitative Finance*, 8(3):217--224.
-- Carmona, R. & Delarue, F. (2018). *Probabilistic Theory of Mean Field Games with Applications I & II*. Springer.
-- Pardoux, E. & Peng, S. (1990). Adapted solution of a backward stochastic differential equation. *Systems & Control Letters*.
+- Cont, R. & Xiong, W. (2024). Dynamics of market making algorithms in dealer markets. *Mathematical Finance*, 34:467-521.
+- Han, J., Jentzen, A. & E, W. (2018). Solving high-dimensional PDEs using deep learning. *PNAS*, 115(34):8505-8510.
+- Han, J., Hu, R. & Long, J. (2022). Learning high-dimensional McKean-Vlasov FBSDEs. *SIAM J. Numer. Anal.*, 60(4):2208-2232.
+- Avellaneda, M. & Stoikov, S. (2008). High-frequency trading in a limit order book. *Quantitative Finance*, 8(3):217-224.
+- Andersson, K. et al. (2023). A deep solver for BSDEs with jumps. *arXiv:2211.04349*.
 
 ## License
 

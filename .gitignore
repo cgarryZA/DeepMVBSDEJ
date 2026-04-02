@@ -1,9 +1,19 @@
-/logs
-/plots
+# Training outputs
+/logs/
+/results/
+/results_full/
+
+# Python
 __pycache__/
 *.pyc
-configs/generated/report/preprint/figures/
-report/preprint/*.aux
-report/preprint/*.log
-report/preprint/*.out
-report/preprint/*.pdf
+*.pyo
+
+# Generated configs
+configs/generated/
+
+# LaTeX source and build artifacts (PDF is at top level)
+/report/
+*.aux
+*.log
+*.out
+*.synctex.gz

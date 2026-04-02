@@ -14,6 +14,10 @@ Usage:
     python simulate_policy.py --weights logs/lob_corrected_model.pt --n_paths 10000
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import argparse
 import os
 import numpy as np

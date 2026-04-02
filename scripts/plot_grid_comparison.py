@@ -10,6 +10,10 @@ Usage:
     python plot_grid_comparison.py --weights logs/lob_corrected_model.pt --fd_horizon finite
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import argparse
 import json
 import os
