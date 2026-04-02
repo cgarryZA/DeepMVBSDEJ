@@ -44,7 +44,7 @@
 
 % ============================================================
 \begin{abstract}
-We investigate when and why distribution-dependent mean-field coupling becomes learnable in deep BSDE solvers for optimal market-making. Starting from the Cont--Xiong (2024) dealer market model, we implement four law encoders (moments, quantiles, histogram, DeepSets) to represent the population distribution, and test whether the learned optimal control depends on population shape. We uncover three failure modes that can mask genuine mean-field effects: (i)~a broken coupling pathway where the BSDE generator does not use the law embedding; (ii)~BatchNorm systematically erasing broadcast (shared) features that are constant across the training batch; and (iii)~mean-pooled permutation-invariant encoders (DeepSets) failing to capture distributional variance under symmetric inputs. After correcting all three, we show that the competitive factor $h(\Phi(\mu_t))$ varies by $4\times$ across population shapes, optimal quotes shift by $2\times$, and quote skew flips sign --- demonstrating genuine distribution-dependent optimal control. The effect is robust across encoder types (MomentEncoder and QuantileEncoder produce qualitatively identical results) and penalty regimes ($\phi = 0.01$ to $0.5$). We extend the model with adverse selection (price-dependent execution), breaking the dimensional reduction that made the base problem effectively one-dimensional, and map the stability frontier across penalty strength, adverse selection intensity, and coupling type. The central finding is that \emph{representation determines learnability}: mean-field effects are present in the model but invisible to the solver unless the law encoder exposes the relevant distributional features.
+We investigate when and why distribution-dependent mean-field coupling becomes learnable in deep BSDE solvers for optimal market-making. Starting from the Cont--Xiong (2024) dealer market model, we implement four law encoders (moments, quantiles, histogram, DeepSets) to represent the population distribution, and test whether the learned optimal control depends on population shape. We uncover three failure modes that can mask genuine mean-field effects: (i)~a broken coupling pathway where the BSDE generator does not use the law embedding; (ii)~BatchNorm systematically erasing broadcast (shared) features that are constant across the training batch; and (iii)~mean-pooled permutation-invariant encoders (DeepSets) failing to capture distributional variance under symmetric inputs. After correcting all three, we show that the competitive factor $h(\Phi(\mu_t))$ varies by $4\times$ across population shapes, optimal quotes shift by $2\times$, and quote skew flips sign --- demonstrating genuine distribution-dependent optimal control. The effect is robust across encoder types (MomentEncoder and QuantileEncoder produce qualitatively identical results) and penalty regimes ($\phi = 0.01$ to $0.5$). We extend the model with adverse selection (price-dependent execution), breaking the dimensional reduction that made the base problem effectively one-dimensional, and map the stability frontier across penalty strength, adverse selection intensity, and coupling type. The central finding is that \emph{solver sensitivity to population structure depends critically on architecture and law representation}: mean-field effects are present in the model but invisible to the solver unless the law encoder exposes the relevant distributional features and the architecture preserves them through normalisation layers.
 \end{abstract}
 
 \noindent\textbf{Keywords:} mean-field games, backward stochastic differential equations, deep learning, market-making, law encoders, BatchNorm, representation collapse
@@ -166,7 +166,7 @@ The law embedding survives all layers because it never passes through BatchNorm.
 
 \subsection{Competitive Factor Network}
 
-$g: \R^d \to (0.1, 1]$ maps the law embedding to a scalar competitive factor via $\text{Dense} \to \text{ReLU} \to \text{Dense} \to \text{Sigmoid}$, with a floor of $0.1$ to prevent degenerate zero-execution regimes.
+$g: \R^d \to (0.1, 1]$ maps the law embedding to a scalar competitive factor via $\text{Dense} \to \text{ReLU} \to \text{Dense} \to \text{Sigmoid}$, with a floor of $0.1$ to prevent degenerate zero-execution regimes. Note that this floor compresses the lower end of the $h$ range: several ``wide'' population results in \Cref{tab:control_sensitivity,tab:phi_sweep} hit $h = 0.100$ exactly, indicating saturation. The reported gaps may therefore underestimate the true variation.
 
 % ============================================================
 \section{Numerical Results}
@@ -230,6 +230,32 @@ Both handcrafted encoders produce qualitatively identical results ($3.6$--$4\tim
   \includegraphics[width=0.7\textwidth]{encoder_comparison.png}
   \caption{Competitive factor $h$ by encoder and population shape. MomentEncoder and QuantileEncoder discriminate; DeepSets does not.}
   \label{fig:encoder_comparison}
+\end{figure}
+
+\subsection{DeepSets Ablation: What Recovers Discrimination?}
+
+To determine whether the DeepSets failure is fundamental or specific to mean pooling, we test two minimal modifications:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Variant & Embedding distance & Discriminates? \\
+\midrule
+DeepSets (mean pool) & 0.046 & No \\
+DeepSets (\textbf{sum} pool) & \textbf{21.92} & \textbf{Yes} \\
+DeepSets + $q^2$ feature & 2.22 & Yes \\
+MomentEncoder & 26.90 & Yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Sum pooling completely recovers discrimination (distance $21.92$, comparable to MomentEncoder). Adding an explicit $q^2$ feature also works ($2.22$). The failure is specifically \emph{mean pooling cancelling symmetric features}: dividing by $N$ erases the scale information that sum pooling preserves. This is not a fundamental limitation of permutation-invariant architectures.
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.65\textwidth]{deepsets_ablation.png}
+  \caption{DeepSets ablation: sum pooling and $q^2$ augmentation both recover distributional discrimination.}
+  \label{fig:deepsets_ablation}
 \end{figure}
 
 \subsection{Penalty Regime Sweep}
@@ -337,11 +363,11 @@ The learned competitive factor $h(\Phi(\mup))$ maps wider inventory distribution
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have shown that distribution-dependent mean-field coupling is learnable in deep BSDE market-making solvers, but only when three architectural conditions are met: the law embedding enters the BSDE generator, broadcast features bypass BatchNorm, and the encoder captures distributional variance. When all three are satisfied, the solver learns economically meaningful competitive effects that materially change optimal quotes.
+We have shown that deep BSDE solvers can be made sensitive to population structure in market-making, producing economically meaningful law-conditioned controls, but only when three architectural conditions are met: the law embedding enters the BSDE generator, broadcast features bypass BatchNorm, and the encoder captures distributional variance. When all three are satisfied, the solver learns economically meaningful competitive effects that materially change optimal quotes.
 
 The deeper lesson is methodological: null results in mean-field deep learning may reflect architectural failures rather than genuine model invariance. Diagnosing the failure mode --- coupling pathway, normalisation, or representation --- is essential before concluding that population structure does not matter.
 
-\paragraph{Limitations.} The competitive factor network learns a monotone mapping (wider $\to$ lower $h$) but we have not verified that this corresponds to a Nash equilibrium fixed point. The adverse selection model uses a simple EMA signal. The experiments are at $d = 2$--$3$.
+\paragraph{Limitations.} We demonstrate learned sensitivity to population structure, not equilibrium-correct sensitivity: the competitive factor network learns a monotone mapping (wider $\to$ lower $h$) but we have not verified that this corresponds to a Nash equilibrium fixed point or that fictitious play converges. The headline results (4$\times$ $h$ variation, 2$\times$ quote shifts) are from single training runs; multi-seed replication with uncertainty quantification is needed for robust magnitude claims. The competitive factor floor at $h = 0.1$ compresses the wide-population regime and may affect reported gap magnitudes. The adverse selection model uses a simple EMA signal. The experiments are at $d = 2$--$3$.
 
 \paragraph{Future work.} Fictitious play convergence verification; FiLM conditioning as alternative to two-stream; DeepSets with variance-sensitive features ($q^2$ pooling); common noise via deep signatures~\cite{hu2025deep}.
 
