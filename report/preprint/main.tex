@@ -146,7 +146,7 @@ where the integration-by-parts $q_T S_T = q_t S_t + \int S \, \dd q + \int q \, 
 \[
   \E[X_T + q_T S_T - \psi(q_T)] = x + qs + \E\biggl[\int_t^T (\text{execution profits}) \, \dd u - \psi(q_T) \biggm| q_t = q\biggr],
 \]
-which depends on $s$ only through the trivial $qs$ term. The supremum over controls preserves this structure, giving $V = x + qs + \phi(t, q)$ where $\phi$ solves a 1D HJB. Since neither execution rates nor $\phi$ depend on $S$, optimal quotes are $S$-independent.
+which depends on $s$ only through the trivial $qs$ term. All expectations are finite under bounded inventory ($|q| \le H$), bounded execution rates ($\nu^{a,b} \le \lambda^{a,b}$), and finite horizon $T$. The supremum over admissible controls (predictable quotes in $[\epsilon, \bar\delta]$) preserves this structure, giving $V = x + qs + \phi(t, q)$ where $\phi$ solves a 1D HJB. Since neither execution rates nor $\phi$ depend on $S$, optimal quotes are $S$-independent.
 \end{proof}
 
 \begin{remark}
@@ -163,16 +163,28 @@ We preserve the exact Poisson dynamics~\eqref{eq:inventory_discrete} and solve a
 \end{equation}
 Inventory jumps by $\pm\Delta$ at Poisson times with rates $\nu_t^a = \lambda^a f(\delta_t^a, \mup)$ and $\nu_t^b = \lambda^b f(\delta_t^b, \mup)$.
 
-\paragraph{Finite-horizon HJB.} By \Cref{prop:1d}, the value function reduces to $\phi(t, q)$. The finite-horizon HJB for $\phi$ on $[0, T]$ with terminal condition $\phi(T, q) = -\psi(q)$ is:
+\begin{proposition}[Finite-horizon HJB]\label{prop:hjb}
+By \Cref{prop:1d}, the value function reduces to $\phi(t, q)$. On the finite inventory grid $q \in \{-H, \ldots, H\}$ with $|q| \le H$, the dynamic programming principle over a small interval $[t, t+\dd t]$ gives (dividing by $\dd t$ and sending $\dd t \to 0$): for $t \in [0, T)$,
 \begin{equation}\label{eq:hjb_finite}
   \partial_t \phi + \sup_{\delta^a, \delta^b} \Bigl[
     \nu^a\bigl(\delta^a\Delta + \phi(t, q-\Delta) - \phi(t,q)\bigr)
     + \nu^b\bigl(\delta^b\Delta + \phi(t, q+\Delta) - \phi(t,q)\bigr)
   \Bigr] - r\phi - \psi(q) = 0,
 \end{equation}
-where $\nu^m = \lambda^m e^{-\alpha\delta^m} h(\mup)$. This is the \emph{exact} problem solved by the finite-difference baseline (\Cref{sec:fd}) and the \emph{computational target} for the deep solver. The stationary HJB~\eqref{eq:hjb} is recovered as $T \to \infty$ with $\partial_t\phi = 0$.
+with terminal condition $\phi(T, q) = -\psi(q)$ and $\nu^m = \lambda^m e^{-\alpha\delta^m} h(\mup)$. This is the exact problem solved by the finite-difference baseline (\Cref{sec:fd}) and the computational target for the deep solver. The stationary HJB~\eqref{eq:hjb} is recovered as $T \to \infty$ with $\partial_t\phi = 0$.
+\end{proposition}
 
-\paragraph{BSDE with jumps (formal computational representation).} We motivate the backward equation by formally applying It\^o's formula to $Y_t = \phi(t, q_t)$. This is a formal identification of the BSDE structure consistent with~\eqref{eq:hjb_finite}, not a rigorous probabilistic representation theorem; we use it as the computational recipe.
+\begin{proposition}[HJB--BSDE generator consistency]\label{prop:generator}
+Assume $\phi \in C^1([0,T])$ for each $q$. Setting $Y_t = \phi(t, q_t)$ and applying It\^o's formula for jump processes: between jumps, $\dd Y = \partial_t\phi \, \dd t$; at jump times, $\Delta Y = U_t^\pm$. Decomposing via compensated Poisson $\dd\tilde{N}^m = \dd N^m - \nu^m \dd t$:
+\[
+  \dd Y_t = \bigl(\partial_t\phi + \nu^b U^+ + \nu^a U^-\bigr)\dd t + U^+ \dd\tilde{N}^b + U^- \dd\tilde{N}^a.
+\]
+Substituting the HJB~\eqref{eq:hjb_finite} identity $\partial_t\phi = r\phi + \psi - \nu^a(\delta^{a*}\Delta + U^-) - \nu^b(\delta^{b*}\Delta + U^+)$ and identifying $\dd Y = -g\,\dd t + (\emph{martingale terms})$:
+\begin{equation}\label{eq:generator_derived}
+  g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+).
+\end{equation}
+This is not a general BSDE representation theorem; it is an exact algebraic reformulation of the reduced HJB under sufficient regularity of $\phi$.
+\end{proposition}
 
 Between jumps, $\phi$ evolves by its time derivative: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
 \begin{align}
@@ -183,14 +195,7 @@ Decomposing into compensated Poisson processes $\dd\tilde{N}_t^m = \dd N_t^m - \
 \begin{equation}\label{eq:fbsdej}
   \dd Y_t = -g(t, X_t, Y_t, Z_t, U_t^+, U_t^-) \, \dd t + Z_t \, \dd W_t^S + U_t^+ \, \dd\tilde{N}_t^b + U_t^- \, \dd\tilde{N}_t^a,
 \end{equation}
-To derive the generator, apply It\^o's formula for jump processes to $Y_t = \phi(t, q_t)$ (using the 1D reduction). Between jumps, $\dd Y = \partial_t\phi \, \dd t$. At jump times, $Y$ changes by $U^\pm$. Writing $\dd N^m = \dd\tilde{N}^m + \nu^m \, \dd t$:
-\[
-  \dd Y_t = \bigl(\partial_t\phi + \nu^b U^+ + \nu^a U^-\bigr) \dd t + Z_t \, \dd W_t^S + U^+ \dd\tilde{N}^b + U^- \dd\tilde{N}^a.
-\]
-The HJB for $\phi$ at an interior point requires $\partial_t\phi = r\phi + \psi - \nu^a(\delta^{a*}\Delta + U^-) - \nu^b(\delta^{b*}\Delta + U^+)$. Substituting and identifying $\dd Y = -g \, \dd t + (\text{martingale terms})$ with $Y = \phi$:
-\begin{equation}\label{eq:generator_jump}
-  g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+).
-\end{equation}
+By \Cref{prop:generator}, the generator is $g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+)$, derived by substituting the HJB identity into the jump-It\^o decomposition.
 The optimal quotes~\eqref{eq:foc_ask}--\eqref{eq:foc_bid} become:
 \begin{equation}\label{eq:optimal_quotes_jump}
   \boxed{\delta_t^{a*} = \frac{1}{\alpha} - \frac{U_t^-}{\Delta}, \qquad \delta_t^{b*} = \frac{1}{\alpha} - \frac{U_t^+}{\Delta},}
@@ -249,9 +254,13 @@ with $Z_t = (\sigma_S \partial_S V, \sigma_q \partial_q V)$ and generator:
 \end{equation}
 where $\delta^{a*} = 1/\alpha + Z_t^q / \sigma_q^*$ and $\sigma_q^* = \sqrt{2\lambda e^{-1}}$ is the equilibrium diffusion coefficient. This is the object actually solved by the code.
 
-\begin{remark}[Total spread is structurally constant in the surrogate]
-Under the first-order ansatz, $\delta^a + \delta^b = 2/\alpha$ identically. This is an algebraic consequence of the control parameterisation, not a learned quantity. Recovery of $2/\alpha = 1.333$ is therefore a sanity check that the code is not catastrophically broken, not evidence of learning a difficult policy.
-\end{remark}
+\begin{lemma}[Structural constant spread in the surrogate]\label{lem:constant_spread}
+Under the first-order ansatz $\delta^a = 1/\alpha + \partial_q V$ and $\delta^b = 1/\alpha - \partial_q V$, the total spread is
+\[
+  \delta^a + \delta^b = \frac{2}{\alpha}
+\]
+identically, independent of inventory, time, or the learned value function. Thus the total spread is structurally fixed by the control parameterisation and is not a learned quantity. Recovery of $2/\alpha = 1.333$ is a sanity check, not evidence of learning a difficult policy.
+\end{lemma}
 
 % ============================================================
 \section{Numerical Method}
