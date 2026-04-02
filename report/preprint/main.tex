@@ -145,9 +145,9 @@ QuantileEncoder & 9.84 & varies \\
 \end{tabular}
 \end{center}
 
-The DeepSets encoder produces nearly identical embeddings for populations with radically different variance. This is structural, not a training failure: mean pooling of symmetric features erases higher-order distributional information.
+The DeepSets encoder produces nearly identical embeddings for populations with radically different variance. Under symmetric inputs and random initialisation, mean pooling suppresses variance information, making discrimination difficult without explicit variance-sensitive features.
 
-\paragraph{Implication.} Permutation-invariant encoders based on mean pooling may fail to capture distributional properties beyond the mean under symmetric inputs unless explicitly trained to detect them. This is a representation limitation, not a coupling failure.
+\paragraph{Implication.} Permutation-invariant encoders based on mean pooling may fail to capture higher-order distributional properties under symmetric inputs unless the per-element network $\psi$ is explicitly designed or trained to break this symmetry. This is a representation limitation, not a coupling failure.
 
 % ============================================================
 \section{Architecture}
@@ -193,7 +193,11 @@ Wide (std 3.0)   & 0.107 & $-0.285$ & 0.334 & 0.999 & 0.065 & 0.024 \\
 \end{tabular}
 \end{table}
 
-The competitive factor varies by $4\times$. Quotes shift by $2\times$. Under wide populations, the market maker narrows the ask (aggressive selling) and widens the bid (defensive), consistent with fierce competition for executions.
+The competitive factor varies by $4\times$. Quotes shift by $2\times$. Under wide populations, the market maker narrows the ask (aggressive selling) and widens the bid (defensive), consistent with fierce competition for executions. All distribution dependence enters the control problem through the scalar competitive factor $h(\Phi(\mup))$, making its learned structure central to the resulting policy.
+
+\begin{remark}[Quote admissibility]
+At extreme population dispersion (std $= 5.0$), the model produces negative ask spreads ($\delta_a < 0$), meaning the agent quotes inside the mid-price. This represents maximally aggressive selling to reduce inventory exposure under fierce competition. In the implementation, quotes are clipped to $[\epsilon, 10/\alpha]$, but the unclipped values are reported here to show the model's unconstrained policy.
+\end{remark}
 
 \begin{figure}[!htb]
   \centering
@@ -324,7 +328,7 @@ Exponential & \checkmark\,(0.32) & \checkmark\,(2.17) & $\times$\,(31.1) & $\tim
 The central finding is that mean-field effects are \emph{present in the model} but \emph{invisible to the solver} unless the law encoder exposes the relevant distributional features. This has implications beyond this specific problem: any deep learning system that conditions on shared population statistics via broadcast features must account for normalisation layer interactions.
 
 \paragraph{Architectural lessons.}
-BatchNorm, while critical for Deep BSDE training stability~\cite{han2018solving}, is fundamentally incompatible with broadcast conditioning signals. The two-stream architecture (BN on per-agent features, no BN on shared features) resolves this cleanly. FiLM-style modulation~\cite{perez2018film} would be a natural alternative.
+BatchNorm, while critical for Deep BSDE training stability~\cite{han2018solving}, is fundamentally incompatible with broadcast conditioning signals. The two-stream architecture (BN on per-agent features, no BN on shared features) resolves this cleanly. FiLM-style modulation~\cite{perez2018film} would be a natural alternative. More broadly, these findings suggest that any deep learning system conditioning on shared population statistics must carefully consider representation and normalisation, as architectural choices can mask genuine interaction effects.
 
 \paragraph{Economic interpretation.}
 The learned competitive factor $h(\Phi(\mup))$ maps wider inventory distributions to lower fill rates, consistent with the intuition that dispersed populations contain more aggressive competitors. The resulting policy adaptations (narrower ask under competition, wider bid) are economically rational inventory management responses.
