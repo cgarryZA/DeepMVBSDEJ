@@ -196,6 +196,10 @@ Decomposing into compensated Poisson processes $\dd\tilde{N}_t^m = \dd N_t^m - \
   \dd Y_t = -g(t, X_t, Y_t, Z_t, U_t^+, U_t^-) \, \dd t + Z_t \, \dd W_t^S + U_t^+ \, \dd\tilde{N}_t^b + U_t^- \, \dd\tilde{N}_t^a,
 \end{equation}
 By \Cref{prop:generator}, the generator is $g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+)$, derived by substituting the HJB identity into the jump-It\^o decomposition.
+
+\begin{remark}[Brownian term after reduction]
+Under \Cref{prop:1d}, $Y_t = \phi(t, q_t)$ does not depend on $S$, so the Brownian term $Z_t \, \dd W_t^S$ is formally zero in the reduced formulation. We retain it in the architecture because the network takes the unreduced state $(S, q)$ as input; in a well-trained model, $Z_t^S$ should converge to approximately zero. Empirically this is confirmed (see \Cref{sec:comparison}).
+\end{remark}
 The optimal quotes~\eqref{eq:foc_ask}--\eqref{eq:foc_bid} become:
 \begin{equation}\label{eq:optimal_quotes_jump}
   \boxed{\delta_t^{a*} = \frac{1}{\alpha} - \frac{U_t^-}{\Delta}, \qquad \delta_t^{b*} = \frac{1}{\alpha} - \frac{U_t^+}{\Delta},}
