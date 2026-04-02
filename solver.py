@@ -28,6 +28,60 @@ from config import DELTA_CLIP
 # =====================================================================
 
 
+class MeanFieldSubNet(nn.Module):
+    """Two-stream subnet for MV models: separate state and law processing.
+
+    The law embedding Phi(mu_t) is broadcast (identical across batch),
+    so ANY BatchNorm layer will zero it out (zero cross-batch variance).
+
+    Solution: two separate streams merged at the output:
+    - State stream: BN-Dense-BN-ReLU (standard, handles per-agent state)
+    - Law stream: Dense-ReLU-Dense (NO BN, handles broadcast law embedding)
+    - Output: state_output + law_output (additive combination)
+
+    This ensures the law signal survives all normalisation layers.
+    """
+
+    def __init__(self, num_hiddens, state_dim, law_dim, dim_out, dtype=torch.float64):
+        super().__init__()
+        self.state_dim = state_dim
+        self.law_dim = law_dim
+        hidden = num_hiddens[0] if num_hiddens else 32
+
+        # State stream (with BN, standard architecture)
+        self.state_bn_in = nn.BatchNorm1d(state_dim, momentum=0.01, eps=1e-6, dtype=dtype)
+        nn.init.normal_(self.state_bn_in.bias, mean=0.0, std=0.1)
+        nn.init.uniform_(self.state_bn_in.weight, 0.1, 0.5)
+        self.state_dense1 = nn.Linear(state_dim, hidden, bias=False, dtype=dtype)
+        self.state_bn1 = nn.BatchNorm1d(hidden, momentum=0.01, eps=1e-6, dtype=dtype)
+        nn.init.normal_(self.state_bn1.bias, mean=0.0, std=0.1)
+        nn.init.uniform_(self.state_bn1.weight, 0.1, 0.5)
+        self.state_dense2 = nn.Linear(hidden, dim_out, dtype=dtype)
+
+        # Law stream (NO BN — broadcast features must not be normalised)
+        self.law_dense1 = nn.Linear(law_dim, hidden, dtype=dtype)
+        self.law_dense2 = nn.Linear(hidden, dim_out, dtype=dtype)
+
+    def forward(self, x):
+        state = x[:, :self.state_dim]
+        law = x[:, self.state_dim:]
+
+        # State stream: BN -> Dense -> BN -> ReLU -> Dense
+        s = self.state_bn_in(state)
+        s = self.state_dense1(s)
+        s = self.state_bn1(s)
+        s = torch.relu(s)
+        s = self.state_dense2(s)
+
+        # Law stream: Dense -> ReLU -> Dense (no BN)
+        l = self.law_dense1(law)
+        l = torch.relu(l)
+        l = self.law_dense2(l)
+
+        # Additive combination
+        return s + l
+
+
 class FeedForwardSubNet(nn.Module):
     """BN -> (Dense(no bias) -> BN -> ReLU) x L -> Dense -> BN
 
@@ -1350,10 +1404,11 @@ class ContXiongLOBMVModel(nn.Module):
                 dtype=dtype,
             )
         )
+        # Use MeanFieldSubNet: BN on state features only, raw law features
         self.subnet = nn.ModuleList(
             [
-                FeedForwardSubNet(
-                    self.net_config.num_hiddens, subnet_in, subnet_out, dtype=dtype,
+                MeanFieldSubNet(
+                    self.net_config.num_hiddens, state_dim, law_dim, subnet_out, dtype=dtype,
                 )
                 for _ in range(bsde.num_time_interval - 1)
             ]
