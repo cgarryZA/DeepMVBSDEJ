@@ -184,7 +184,7 @@ Substituting the HJB~\eqref{eq:hjb_finite} identity $\partial_t\phi = r\phi + \p
 \begin{equation}\label{eq:generator_derived}
   g = -rY - \psi(q) + \nu^a(\delta^{a*}\Delta + U^-) + \nu^b(\delta^{b*}\Delta + U^+).
 \end{equation}
-This is not a general BSDE representation theorem; it is an exact algebraic reformulation of the reduced HJB under sufficient regularity of $\phi$.
+This is not a general BSDE representation theorem; it is an exact algebraic reformulation of the reduced HJB under sufficient regularity of $\phi$. We do not establish a verification theorem or well-posedness of the associated BSDE; the construction should be interpreted as a formal consistency relation with the HJB.
 \end{proposition}
 
 Between jumps, $\phi$ evolves by its time derivative: $\dd \phi = \partial_t \phi \, \dd t$. At jump times, inventory changes by $\pm\Delta$ and the value jumps discretely. Collecting terms:
@@ -287,7 +287,7 @@ $Y_0$ is a trainable scalar. The terminal target is $\xi \coloneqq -\psi(q_T)$ a
 
 \paragraph{Control loop.} At each Euler step $n$, the subnet $\phi_n$ evaluates on $X_{n+1}$ (the post-step state) and outputs $(Z_n, U_n^+, U_n^-)$. Quotes are computed from $U^\pm$ via~\eqref{eq:optimal_quotes_jump} and clipped to $[0.001, \, 10/\alpha]$. Execution rates $\nu_n^{a,b}$ are then evaluated explicitly at the clipped quotes. No fixed-point iteration or implicit solve is performed: the control map from network output to quotes to intensities to generator is fully explicit and feedforward.
 
-\subsection{Mean-Field Coupling}
+\subsection{Moment-Based Mean-Field Proxy}
 
 We use fictitious play~\cite{han2022learning}: every $K_\mathrm{drift} = 100$ training steps, compute empirical $(\bar{q}_t, \bar{\delta}_t)$ from batch trajectories and retrain a small network $\hat{h}(t, \bar{q}_t, \bar{\delta}_t)$ approximating $h(\mup)$. We do not establish convergence of this loop for the Cont--Xiong model, nor verify uniqueness or sensitivity to initialisation.
 
