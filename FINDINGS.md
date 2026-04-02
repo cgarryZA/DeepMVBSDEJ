@@ -64,3 +64,20 @@ The DeepSets model learned "competition exists" (h ≈ 0.43 < 1.0) but NOT "popu
 5. Representation choice critically determines whether MF effects are learnable
 
 This is a layered, diagnostic result — exactly what the dissertation needs.
+
+## Finding 5: Controls change dramatically with population (MomentEncoder)
+
+After fixing both bugs and using MomentEncoder:
+
+At q=0, quotes vary by 2x across population shapes:
+- Narrow (std=0.1): δ_a=0.696, δ_b=0.638, ν_a=0.160, ν_b=0.175
+- Wide (std=3.0):   δ_a=0.334, δ_b=0.999, ν_a=0.065, ν_b=0.024
+
+At q=2 (long inventory), quote skew flips:
+- Narrow: skew = +0.142 (slightly wider ask)
+- Wide:   skew = -1.622 (extremely aggressive ask)
+
+This is genuine distribution-dependent optimal control:
+- Wider population → fiercer competition → narrower ask, wider bid
+- The market maker adapts strategy based on population inventory distribution
+- Not just a level shift — the entire quoting strategy changes shape
