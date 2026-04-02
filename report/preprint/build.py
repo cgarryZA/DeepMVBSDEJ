@@ -33,11 +33,11 @@ EXTRA_FIGURES = [
     ("plots/comparison/fd_vs_deepbsde.png", "fd_vs_deepbsde.png"),
     ("plots/baseline/fd_value_functions.png", "fd_value_functions.png"),
     ("plots/baseline/fd_optimal_quotes.png", "fd_optimal_quotes.png"),
-    ("plots/experiments/multiseed_comparison.png", "multiseed_comparison.png"),
-    ("plots/experiments/ablation_meanfield.png", "ablation_meanfield.png"),
-    ("plots/experiments/stress_multiseed.png", "stress_multiseed.png"),
-    ("plots/experiments/breaking_point.png", "breaking_point.png"),
-    ("plots/experiments/sensitivity.png", "sensitivity.png"),
+    ("plots/experiments_full/multiseed_comparison.png", "multiseed_comparison.png"),
+    ("plots/experiments_full/ablation_meanfield.png", "ablation_meanfield.png"),
+    ("plots/experiments_full/stress_multiseed.png", "stress_multiseed.png"),
+    ("plots/experiments_full/breaking_point.png", "breaking_point.png"),
+    ("plots/experiments_full/sensitivity.png", "sensitivity.png"),
 ]
 
 
