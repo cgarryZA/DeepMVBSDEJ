@@ -1278,6 +1278,14 @@ class ContXiongLOBJumpSolver:
         print("Final Y0: %.6f" % self.y_init.item())
         print("Final loss: %.6e" % val_loss.item())
 
+        if hasattr(self, '_save_path'):
+            torch.save({
+                "model_state": self.model.state_dict(),
+                "y0": self.y_init.item(),
+                "final_loss": val_loss.item(),
+            }, self._save_path)
+            logging.info("Model saved to %s" % self._save_path)
+
         return {
             "history": np.array(training_history),
             "y0": self.y_init.item(),
