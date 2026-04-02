@@ -1395,7 +1395,11 @@ class ContXiongLOBMVModel(nn.Module):
             law_embed_batch = law_embed.unsqueeze(0).expand(batch_size, -1)
             law_embeddings.append(law_embed.detach().cpu().numpy())
 
-            # BSDE step
+            # SET LAW EMBEDDING so f_tf uses it for competitive factor
+            if hasattr(self.bsde, 'set_current_law_embed'):
+                self.bsde.set_current_law_embed(law_embed)
+
+            # BSDE step (f_tf now uses h(Phi(mu_t)) not old scalar proxy)
             y = (
                 y
                 - self.bsde.delta_t * self.bsde.f_tf(time_stamp[t], x[:, :, t], y, z)
@@ -1408,12 +1412,17 @@ class ContXiongLOBMVModel(nn.Module):
             subnet_input = torch.cat([own_state, law_embed_batch], dim=1)  # [batch, 2+law_dim]
             z = self.subnet[t](subnet_input) / self.bsde.dim
 
-        # Terminal step
+        # Terminal step — set law embedding for final f_tf call
         z_q = z[:, 1:2]
         delta_a, delta_b = self.bsde._optimal_quotes_tf(z_q)
         mean_spreads.append((torch.mean(delta_a) + torch.mean(delta_b)).item())
         mean_inventories.append(torch.mean(x[:, 1, -2]).item())
         z_max_history.append(torch.max(torch.abs(z)).item())
+
+        if hasattr(self.bsde, 'set_current_law_embed'):
+            particles_terminal = x[:, :, -2]
+            law_embed_terminal = self.law_encoder.encode(particles_terminal)
+            self.bsde.set_current_law_embed(law_embed_terminal)
 
         y = (
             y
@@ -1451,8 +1460,14 @@ class ContXiongLOBMVSolver:
         self.opt_config = self.net_config.opt_config1
         self.y_init = self.model.y_init
 
+        # Include competitive factor net parameters in optimizer
+        all_params = list(self.model.parameters())
+        if hasattr(bsde, 'competitive_factor_net'):
+            bsde.competitive_factor_net.to(self.device)
+            all_params += list(bsde.competitive_factor_net.parameters())
+
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=self.opt_config.lr_values[0], eps=1e-8
+            all_params, lr=self.opt_config.lr_values[0], eps=1e-8
         )
         self.scheduler = make_piecewise_lr_scheduler(
             self.optimizer, self.opt_config.lr_boundaries, self.opt_config.lr_values
