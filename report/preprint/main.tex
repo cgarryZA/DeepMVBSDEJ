@@ -238,10 +238,23 @@ MV coupling is active at all tested $\phi$. The earlier ``no effect at $\phi = 0
 
 \subsection{Model Hierarchy}
 
-% STUB: Results from full 4-model comparison
-% Base (2D) vs MV (2D) vs Adverse (3D) vs Adverse+MV (3D)
-% Table with Y0, loss for each
-\textbf{[Pending: full model hierarchy comparison running.]}
+\begin{table}[!htb]
+\centering
+\caption{Model hierarchy comparison ($\phi = 0.1$, MomentEncoder, 1000 iterations).}
+\label{tab:hierarchy}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Model & State & $Y_0$ & MV effect \\
+\midrule
+Base (no coupling) & 2D $(S, q)$ & 0.377 & --- \\
+MV only (MomentEncoder) & 2D $(S, q)$ & 0.052 & $-0.325$ \\
+Adverse only (no coupling) & 3D $(S, q, \text{sig})$ & 0.380 & --- \\
+Adverse + MV (MomentEncoder) & 3D $(S, q, \text{sig})$ & 0.086 & $-0.294$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+MV coupling reduces $Y_0$ by $\sim\!0.3$ in both 2D and 3D settings. Adverse selection alone barely changes $Y_0$ (difference $0.003$), consistent with its role in reshaping value structure rather than level. The MV effect is comparable with and without adverse selection, suggesting the competitive discount is the dominant mechanism at $\phi = 0.1$.
 
 \subsection{Stability Frontier}
 
