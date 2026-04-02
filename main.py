@@ -92,6 +92,9 @@ def main():
     elif config.eqn.eqn_name == "contxiong_lob_adverse":
         solver = ContXiongLOBSolver(config, bsde, device=device)
         solver._save_path = "{}_model.pt".format(path_prefix)
+    elif config.eqn.eqn_name == "contxiong_lob_mv_adverse":
+        solver = ContXiongLOBMVSolver(config, bsde, device=device)
+        solver._save_path = "{}_model.pt".format(path_prefix)
     else:
         raise ValueError(f"No solver for equation '{config.eqn.eqn_name}'")
 

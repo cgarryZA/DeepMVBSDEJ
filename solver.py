@@ -1321,9 +1321,10 @@ class ContXiongLOBMVModel(nn.Module):
         self.law_encoder = bsde.law_encoder
         law_dim = bsde.law_embed_dim
 
-        # Subnet input: own state (2) + law embedding (law_dim)
-        subnet_in = 2 + law_dim
-        subnet_out = 2  # (Z^S, Z^q)
+        # Subnet input: own state (dim) + law embedding (law_dim)
+        state_dim = bsde.dim  # 2 for base, 3 for adverse selection
+        subnet_in = state_dim + law_dim
+        subnet_out = state_dim  # (Z^S, Z^q) or (Z^S, Z^q, Z^sig)
 
         self.y_init = nn.Parameter(
             torch.tensor(
@@ -1337,7 +1338,7 @@ class ContXiongLOBMVModel(nn.Module):
         )
         self.z_init = nn.Parameter(
             torch.tensor(
-                np.random.uniform(low=-0.1, high=0.1, size=[1, 2]),
+                np.random.uniform(low=-0.1, high=0.1, size=[1, state_dim]),
                 dtype=dtype,
             )
         )
