@@ -168,6 +168,10 @@ The law embedding survives all layers because it never passes through BatchNorm.
 
 $g: \R^d \to (0.1, 1]$ maps the law embedding to a scalar competitive factor via $\text{Dense} \to \text{ReLU} \to \text{Dense} \to \text{Sigmoid}$, with a floor of $0.1$ to prevent degenerate zero-execution regimes. Note that this floor compresses the lower end of the $h$ range: several ``wide'' population results in \Cref{tab:control_sensitivity,tab:phi_sweep} hit $h = 0.100$ exactly, indicating saturation. The reported gaps may therefore underestimate the true variation.
 
+\subsection{Training Details}
+
+All models use float64 precision, Adam optimiser with piecewise constant LR ($10^{-2}$ for steps 0--2000, $10^{-3}$ for 2000--4000, $10^{-4}$ thereafter), batch size 256, 50 Euler time steps over $T = 1.0$. State stream: 2 hidden layers $\times$ 32 neurons with BatchNorm (momentum 0.01). Law stream: 2 hidden layers $\times$ 32 neurons, no normalisation. Competitive factor network $g$: Linear(embed\_dim $\to$ 16) $\to$ ReLU $\to$ Linear(16 $\to$ 1) $\to$ Sigmoid, with output $0.1 + 0.9 \cdot \text{sigmoid}(\cdot)$ to enforce $h \in (0.1, 1]$. Population shapes are sampled as $q_i \sim \mathcal{N}(0, \sigma_q^2)$ clipped to $[-10, 10]$. Training uses the batch itself as the particle system --- no separate simulation. All code: \url{https://github.com/cgarryZA/DeepMVBSDEJ}.
+
 % ============================================================
 \section{Numerical Results}
 \label{sec:results}
@@ -367,6 +371,51 @@ Exponential & \checkmark\,(0.32) & \checkmark\,(2.17) & $\times$\,(31.1) & $\tim
   \label{fig:phase_diagram}
 \end{figure}
 
+\subsection{Causal and Consistency Checks}
+
+\paragraph{Placebo test: shuffled embeddings.}
+To confirm that the learned sensitivity is genuinely driven by population structure (not extra model capacity), we destroy the semantic link between the population and its embedding while preserving architecture and dimensionality (\Cref{tab:placebo}).
+
+\begin{table}[!htb]
+\centering
+\caption{Placebo test: $h$ under real vs destroyed embeddings.}
+\label{tab:placebo}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Embedding source & $h$ value & Interpretation \\
+\midrule
+Real narrow (std 0.1) & 0.434 & Genuine signal \\
+Real wide (std 5.0) & 0.100 & Genuine signal \\
+\midrule
+Shuffled narrow (5 permutations) & 0.44--0.45 & $\approx$ narrow \\
+Random Gaussian (5 draws) & 0.45--0.47 & $\approx$ narrow \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Shuffled and random embeddings all produce $h \approx 0.44$--$0.47$, similar to the narrow (low-competition) baseline. They do \emph{not} produce $h = 0.10$ (the wide-population value). The low $h$ under wide populations is therefore genuinely caused by the distributional signal, not by random embedding noise or extra model capacity.
+
+\paragraph{Swap test.}
+Feeding the narrow embedding to an agent at $q = 0$ gives $\delta_a = 0.66$ (conservative); feeding the wide embedding gives $\delta_a = 0.30$ (aggressive). Same agent state, different population embedding $\to$ different policy. This confirms the control pathway is causally active.
+
+\paragraph{FD consistency at exogenous $h$.}
+As a policy-level consistency check, we solve the single-agent FD problem with exogenous execution scaling $\lambda_{\text{eff}} = h \cdot \lambda$:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+$h$ (exogenous) & FD $V(0,0)$ & FD spread \\
+\midrule
+1.00 & 0.384 & 1.644 \\
+0.45 ($\approx$ narrow) & 0.171 & 1.674 \\
+0.28 ($\approx$ medium) & 0.106 & 1.685 \\
+0.11 ($\approx$ wide) & 0.042 & 1.696 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The FD values are directionally consistent: lower $h$ $\to$ lower value, matching the neural network's learned ordering. FD spread barely changes with $h$ ($1.64$--$1.70$), consistent with the discrete HJB structure where quotes depend on value increments rather than execution rate levels. The neural network's larger quote variation arises from the law embedding entering the subnet directly (two-stream architecture), providing an additional control channel beyond the HJB-derived competitive factor.
+
 % ============================================================
 \section{Discussion}
 \label{sec:discussion}
@@ -384,7 +433,7 @@ The learned competitive factor $h(\Phi(\mup))$ maps wider inventory distribution
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have shown that deep BSDE solvers can be made sensitive to population structure in market-making, producing economically meaningful law-conditioned controls, but only when three architectural conditions are met: the law embedding enters the BSDE generator, broadcast features bypass BatchNorm, and the encoder captures distributional variance. When all three are satisfied, the solver learns economically meaningful competitive effects that materially change optimal quotes.
+We have shown that deep BSDE solvers can be made sensitive to population structure in market-making, producing economically meaningful law-conditioned controls, but only when three architectural conditions are met: the law embedding enters the BSDE generator, broadcast features bypass BatchNorm, and the encoder captures distributional variance. When all three are satisfied, the solver learns distribution-dependent controls that disappear under semantic-destruction placebos and align directionally with finite-difference comparative statics under exogenous competition.
 
 The deeper lesson is methodological: null results in mean-field deep learning may reflect architectural failures rather than genuine model invariance. Diagnosing the failure mode --- coupling pathway, normalisation, or representation --- is essential before concluding that population structure does not matter.
 
