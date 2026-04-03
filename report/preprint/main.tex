@@ -280,9 +280,9 @@ MV coupling is active at all tested $\phi$. The earlier ``no effect at $\phi = 0
 
 \begin{figure}[!htb]
   \centering
-  \includegraphics[width=0.85\textwidth]{phi_sweep_mv.png}
-  \caption{Left: $h$-gap (narrow $-$ wide) vs penalty $\phi$, peaking at $\phi = 0.1$. Right: $Y_0$ vs $\phi$, going negative at $\phi = 0.5$.}
-  \label{fig:phi_sweep}
+  \includegraphics[width=0.85\textwidth]{regime_transition.png}
+  \caption{Left: $h$-gap (narrow $-$ wide) vs penalty $\phi$. Right: PolicyGap (mean $|\delta^a_{\text{narrow}} - \delta^a_{\text{wide}}|$ across inventory). Both confirm law sensitivity is active across all tested $\phi$, with peak discrimination around $\phi = 0.05$--$0.1$.}
+  \label{fig:regime}
 \end{figure}
 
 \subsection{Model Hierarchy}
@@ -311,6 +311,27 @@ MV coupling reduces $Y_0$ by $\sim\!0.3$ in both 2D and 3D settings. Adverse sel
   \caption{$Y_0$ across the model hierarchy. MV coupling dominates; adverse selection has minimal value-level effect.}
   \label{fig:hierarchy}
 \end{figure}
+
+\subsection{Multi-Seed Robustness}
+
+To confirm the headline results are not seed-dependent, we repeat the key comparison across 5 random seeds (2000 iterations each):
+
+\begin{table}[!htb]
+\centering
+\caption{Multi-seed results ($\phi = 0.1$, 5 seeds, 2000 iterations).}
+\label{tab:multiseed}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Configuration & $Y_0$ (mean $\pm$ std) & $h$-gap (mean $\pm$ std) \\
+\midrule
+No coupling & $0.378 \pm 0.002$ & --- \\
+MV MomentEncoder & $0.027 \pm 0.039$ & $0.259 \pm 0.055$ \\
+MV QuantileEncoder & $0.044 \pm 0.039$ & $0.251 \pm 0.047$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $h$-gap is robust: $0.259 \pm 0.055$ (Moments) and $0.251 \pm 0.047$ (Quantiles), both significantly nonzero and consistent across encoders. The no-coupling baseline has very low variance ($\pm 0.002$), while MV models show higher $Y_0$ variance ($\pm 0.039$), reflecting the additional complexity of the learned competitive factor. Importantly, the \emph{gap} is more stable than the \emph{level}: all 10 MV runs (5 per encoder) produce nonzero $h$-gaps, confirming the distribution sensitivity is not a training artifact.
 
 \subsection{Stability Frontier}
 
@@ -367,7 +388,7 @@ We have shown that deep BSDE solvers can be made sensitive to population structu
 
 The deeper lesson is methodological: null results in mean-field deep learning may reflect architectural failures rather than genuine model invariance. Diagnosing the failure mode --- coupling pathway, normalisation, or representation --- is essential before concluding that population structure does not matter.
 
-\paragraph{Limitations.} We demonstrate learned sensitivity to population structure, not equilibrium-correct sensitivity: the competitive factor network learns a monotone mapping (wider $\to$ lower $h$) but we have not verified that this corresponds to a Nash equilibrium fixed point or that fictitious play converges. The headline results (4$\times$ $h$ variation, 2$\times$ quote shifts) are from single training runs; multi-seed replication with uncertainty quantification is needed for robust magnitude claims. The competitive factor floor at $h = 0.1$ compresses the wide-population regime and may affect reported gap magnitudes. The adverse selection model uses a simple EMA signal. The experiments are at $d = 2$--$3$.
+\paragraph{Limitations.} We demonstrate learned sensitivity to population structure, not equilibrium-correct sensitivity: the competitive factor network learns a monotone mapping (wider $\to$ lower $h$) but we have not verified that this corresponds to a Nash equilibrium fixed point or that fictitious play converges. Multi-seed results (\Cref{tab:multiseed}) confirm the $h$-gap is robust ($0.259 \pm 0.055$), but the $Y_0$ magnitude has higher variance across seeds ($\pm 0.039$). The competitive factor floor at $h = 0.1$ compresses the wide-population regime and may affect reported gap magnitudes. The adverse selection model uses a simple EMA signal. The experiments are at $d = 2$--$3$.
 
 \paragraph{Future work.} Fictitious play convergence verification; FiLM conditioning as alternative to two-stream; DeepSets with variance-sensitive features ($q^2$ pooling); common noise via deep signatures~\cite{hu2025deep}.
 
