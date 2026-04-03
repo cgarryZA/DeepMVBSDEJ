@@ -44,7 +44,7 @@
 
 % ============================================================
 \begin{abstract}
-We investigate when and why distribution-dependent mean-field coupling becomes learnable in deep BSDE solvers for optimal market-making. Starting from the Cont--Xiong (2024) dealer market model, we implement four law encoders (moments, quantiles, histogram, DeepSets) to represent the population distribution, and test whether the learned optimal control depends on population shape. We uncover three failure modes that can mask genuine mean-field effects: (i)~a broken coupling pathway where the BSDE generator does not use the law embedding; (ii)~BatchNorm systematically erasing broadcast (shared) features that are constant across the training batch; and (iii)~mean-pooled permutation-invariant encoders (DeepSets) failing to capture distributional variance under symmetric inputs. After correcting all three, we show that the competitive factor $h(\Phi(\mu_t))$ varies by $4\times$ across population shapes, optimal quotes shift by $2\times$, and quote skew flips sign --- demonstrating causally verified distribution-dependent controls. The effect is robust across encoder types (MomentEncoder and QuantileEncoder produce qualitatively identical results) and penalty regimes ($\phi = 0.01$ to $0.5$). We extend the model with adverse selection (price-dependent execution), breaking the dimensional reduction that made the base problem effectively one-dimensional, and map the stability frontier across penalty strength, adverse selection intensity, and coupling type. The central finding is that \emph{solver sensitivity to population structure depends critically on architecture and law representation}: mean-field effects are present in the model but invisible to the solver unless the law encoder exposes the relevant distributional features and the architecture preserves them through normalisation layers.
+We investigate when and why distribution-dependent mean-field coupling becomes learnable in deep BSDE solvers for optimal market-making. Starting from the Cont--Xiong (2024) dealer market model, we implement four law encoders (moments, quantiles, histogram, DeepSets) to represent the population distribution, and test whether the learned optimal control depends on population shape. We uncover three failure modes that can mask genuine mean-field effects: (i)~a broken coupling pathway where the BSDE generator does not use the law embedding; (ii)~BatchNorm systematically erasing broadcast (shared) features that are constant across the training batch; and (iii)~mean-pooled permutation-invariant encoders (DeepSets) failing to capture distributional variance under symmetric inputs. After correcting all three, we show that the competitive factor $h(\Phi(\mu_t))$ varies by $4\times$ across population shapes, optimal quotes shift by $2\times$, and quote skew flips sign --- demonstrating distribution-dependent controls that are ablation-verified (disappearing under semantic-destruction placebos). The effect is robust across encoder types (MomentEncoder and QuantileEncoder produce qualitatively identical results) and penalty regimes ($\phi = 0.01$ to $0.5$). We extend the model with adverse selection (price-dependent execution), breaking the dimensional reduction that made the base problem effectively one-dimensional, and map the stability frontier across penalty strength, adverse selection intensity, and coupling type. The central finding is that \emph{solver sensitivity to population structure depends critically on architecture and law representation}: mean-field effects are present in the model but invisible to the solver unless the law encoder exposes the relevant distributional features and the architecture preserves them through normalisation layers.
 \end{abstract}
 
 \noindent\textbf{Keywords:} mean-field games, backward stochastic differential equations, deep learning, market-making, law encoders, BatchNorm, representation collapse
@@ -110,9 +110,9 @@ where $\text{signal}_t$ is an EMA of normalised price increments and $\eta$ cont
 \section{Three Failure Modes of Mean-Field Coupling}
 \label{sec:failures}
 
-We identified three independent architectural failures, each sufficient to suppress the mean-field signal.
+We identified three independent failures that suppressed the mean-field signal. The first is an implementation error (the law embedding was not connected to the loss); the second and third are genuine architectural issues that arise even in correctly wired systems and have implications beyond this specific application.
 
-\subsection{Failure 1: Generator Bypass}
+\subsection{Failure 1: Generator Bypass (Implementation Error)}
 
 The BSDE generator $f(t, x, y, z)$ computes execution profits and thus determines the training loss. In our initial implementation, $f$ inherited from the base class and used the old scalar moment proxy $\hat{h}(t, \bar{q}, \bar{\delta})$ rather than the law embedding $\Phi(\mup)$. The law encoder entered the subnet inputs (affecting $Z$ prediction) but not the generator (affecting the BSDE dynamics). Since the loss is determined by the terminal mismatch $|Y_T - g(X_T)|^2$ propagated through the generator, the optimiser had no gradient signal connecting $\Phi$ to the loss.
 
@@ -128,7 +128,7 @@ When $x$ is constant across the batch, $\text{Var}_{\text{batch}} = 0$ and the o
 
 \paragraph{Fix.} Two-stream architecture: state features pass through BatchNorm, law features bypass it entirely. The streams are combined additively after separate processing.
 
-\subsection{Failure 3: DeepSets Representation Collapse}
+\subsection{Failure 3: Mean-Pooling Representation Collapse (Architectural)}
 
 The DeepSets encoder computes $\Phi = \rho(\frac{1}{N}\sum_i \psi(x_i))$. Under random initialisation, $\psi$ is approximately symmetric. For zero-mean populations, positive and negative inventory contributions cancel under mean pooling, collapsing variance information:
 
@@ -426,8 +426,11 @@ The central finding is that mean-field effects are \emph{present in the model} b
 \paragraph{Architectural lessons.}
 BatchNorm, while critical for Deep BSDE training stability~\cite{han2018solving}, is fundamentally incompatible with broadcast conditioning signals. The two-stream architecture (BN on per-agent features, no BN on shared features) resolves this cleanly. FiLM-style modulation~\cite{perez2018film} would be a natural alternative. More broadly, these findings suggest that any deep learning system conditioning on shared population statistics must carefully consider representation and normalisation, as architectural choices can mask genuine interaction effects.
 
+\paragraph{Two pathways for law dependence.}
+The current architecture provides two channels through which $\mup$ affects control: (i)~the competitive factor $h(\Phi(\mup))$ entering the generator via execution rates, and (ii)~the law embedding entering the subnet directly via the two-stream architecture. We have not disentangled how much of the observed policy variation comes from each. The FD consistency check validates the $h$-channel (value ordering matches exogenous scaling), but the larger quote shifts may partly reflect the direct subnet conditioning. Isolating each pathway's contribution --- e.g., by ablating the law stream while keeping $h$, or vice versa --- is an important direction for future work.
+
 \paragraph{Economic interpretation.}
-The learned competitive factor $h(\Phi(\mup))$ maps wider inventory distributions to lower fill rates, consistent with the intuition that dispersed populations contain more aggressive competitors. The resulting policy adaptations (narrower ask under competition, wider bid) are economically rational inventory management responses.
+The learned competitive factor $h(\Phi(\mup))$ maps wider inventory distributions to lower fill rates, consistent with the intuition that dispersed populations contain more aggressive competitors. The resulting policy adaptations (narrower ask under competition, wider bid) are economically rational inventory management responses. We emphasise that this is a learned mapping, not a derived equilibrium condition: the economic story is plausible but not uniquely identified from the current evidence.
 
 % ============================================================
 \section{Conclusion}
