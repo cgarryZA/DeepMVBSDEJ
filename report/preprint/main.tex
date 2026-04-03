@@ -447,6 +447,8 @@ $h$=narrow, subnet=wide & 0.454 & $+1.794$ & \textbf{2.758} \\
 
 The quote shift comes \emph{entirely} from the subnet pathway: swapping the subnet embedding changes $\delta_a$ from $0.663$ to $2.758$ regardless of $h$. Swapping $h$ alone does not move quotes at all. This means \textbf{$h$ controls the value level} (through execution rates in the generator) \textbf{while the subnet controls the quoting strategy} (through $Z^q$ directly). The two channels are functionally independent in the trained model.
 
+As a control experiment, we train an $h$-only model where the law embedding enters $f$ (via $h$) but \emph{not} the subnet. The resulting $Z^q$ is identical across all population shapes ($Z^q = 0.024$ for narrow, medium, and wide), confirming that the generator pathway alone \textbf{cannot drive quote changes}. Direct subnet conditioning is necessary for policy-level mean-field dependence in this architecture.
+
 \paragraph{Generalisation across population families.}
 The trained model (MomentEncoder, $\phi = 0.1$) generalises to distribution types not seen during training. Evaluating on uniform, bimodal, skewed (chi-squared), and heavy-tailed (Student's $t$, $\nu=3$) populations, the competitive factor $h$ tracks population dispersion monotonically: uniform$[-1,1]$ ($h = 0.36$), bimodal$\pm 2$ ($h = 0.19$), heavy-tail ($h = 0.10$). Heavy-tailed distributions produce lower $h$ than Gaussians of similar variance, suggesting the model is sensitive to tail behaviour beyond the second moment. This is not memorisation of Gaussian shapes.
 
